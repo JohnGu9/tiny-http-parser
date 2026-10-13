@@ -1,9 +1,7 @@
 # Intro
 
-Pure C implement http parser base on [cc](https://github.com/JacksonAllan/CC).
+Pure C implement http parser.
 
 # Requirement
-
-cc.h
 
 string.h

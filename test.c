@@ -1,7 +1,7 @@
 #include "tiny-http-parser.h"
 
-#include <memory.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static void test0();
 static void test1();
@@ -19,7 +19,18 @@ int main()
     return 0;
 }
 
+static TinyHttpParserPair_t headers_list[8];
+
 #define FMT_STRING_VIEW(string_view) (int)(string_view).size, (string_view).data
+
+static void print_headers_list(const TinyHttpParserPair_t *headers_list, TINY_HTTP_PARSER_SIZE_T headers_list_size)
+{
+    for (TINY_HTTP_PARSER_SIZE_T i = 0; i < headers_list_size; i++)
+    {
+        const TinyHttpParserPair_t *el = &headers_list[i];
+        printf("%.*s: %.*s\n", FMT_STRING_VIEW(el->key), FMT_STRING_VIEW(el->value));
+    }
+}
 
 static TINY_HTTP_PARSER_SIZE_T print_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
@@ -30,10 +41,7 @@ static TINY_HTTP_PARSER_SIZE_T print_header(TinyHttpParserContext_t *context, co
                FMT_STRING_VIEW(header->response_header->status_code),
                FMT_STRING_VIEW(header->response_header->reason_phrase));
 
-        for_each(header->response_header->headers, el)
-        {
-            printf("%.*s: %.*s\n", FMT_STRING_VIEW(el->key), FMT_STRING_VIEW(el->value));
-        }
+        print_headers_list(header->response_header->headers_list, header->response_header->headers_list_size);
     }
 
     if (header->request_header != NULL)
@@ -43,10 +51,7 @@ static TINY_HTTP_PARSER_SIZE_T print_header(TinyHttpParserContext_t *context, co
                FMT_STRING_VIEW(header->request_header->path),
                FMT_STRING_VIEW(header->request_header->protocol));
 
-        for_each(header->request_header->headers, el)
-        {
-            printf("%.*s: %.*s\n", FMT_STRING_VIEW(el->key), FMT_STRING_VIEW(el->value));
-        }
+        print_headers_list(header->request_header->headers_list, header->request_header->headers_list_size);
     }
 
     return 0;
@@ -87,7 +92,7 @@ static void test0()
 {
     printf("\ntest0:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_header, print_body_stream, on_error, alloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, headers_list, 8, print_header, print_body_stream, on_error, alloc_buffer, free_buffer);
 
     const char test_string[] = "HTTP/1.1          200 OK\r\n"
                                "Content-Type: text/html\r\n"
@@ -106,7 +111,7 @@ static void test1()
 {
     printf("\ntest1:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_header, print_body_stream, on_error, alloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, headers_list, 8, print_header, print_body_stream, on_error, alloc_buffer, free_buffer);
 
     const char test_string[] = "GET /     HTTP/1.1\r\n"
                                "Host: 192.168.7.1\r\n"
@@ -126,7 +131,7 @@ static void test2()
 {
     printf("\ntest2:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_header, print_body_stream, on_error, alloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, headers_list, 8, print_header, print_body_stream, on_error, alloc_buffer, free_buffer);
 
     const char test_string_fragment0[] = "HTTP/1.1 200 OK\r\n"
                                          "Content-";
@@ -160,7 +165,7 @@ static void test3()
 {
     printf("\ntest3:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_content_length, print_body_stream, on_error, alloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, headers_list, 8, print_content_length, print_body_stream, on_error, alloc_buffer, free_buffer);
 
     const char test_string_fragment0[] = "HTTP/1.1 200 OK\r\n"
                                          "Content-Type: text/html\r\n";
@@ -200,12 +205,12 @@ static void on_multi_part_error(TinyHttpParserMultiPartContext_t *context, const
     printf("on_multi_part_error: %s\n", reason);
 }
 
-static void on_part(TinyHttpParserMultiPartContext_t *context, vec(TinyHttpParserPair_t) * headers, const char *data, TINY_HTTP_PARSER_SIZE_T size)
+static void on_part(TinyHttpParserMultiPartContext_t *context,
+                    TinyHttpParserPair_t *headers_list,
+                    TINY_HTTP_PARSER_SIZE_T headers_list_size,
+                    const char *data, TINY_HTTP_PARSER_SIZE_T size)
 {
-    for_each(headers, el)
-    {
-        printf("%.*s: %.*s\n", FMT_STRING_VIEW(el->key), FMT_STRING_VIEW(el->value));
-    }
+    print_headers_list(headers_list, headers_list_size);
     printf("on_part:\n%.*s\n", (int)size, data);
 }
 
@@ -229,10 +234,10 @@ static void test_multi_part()
         .size = sizeof(boundary_string) - 1,
     };
     TinyHttpParserMultiPartContext_t mp_context;
-    tiny_http_parser_multi_part_init(&mp_context, &boundary, NULL, on_part, on_multi_part_error, alloc_buffer_multi_part, free_buffer_multi_part);
+    tiny_http_parser_multi_part_init(&mp_context, &boundary, NULL, headers_list, 8, on_part, on_multi_part_error, alloc_buffer_multi_part, free_buffer_multi_part);
 
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, &mp_context, print_content_length, on_multi_part_body, on_error, alloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, &mp_context, headers_list, 8, print_content_length, on_multi_part_body, on_error, alloc_buffer, free_buffer);
 
     const char test_string_fragment0[] = "GET / HTTP/1.1\r\n"
                                          "Host: 192.168.7.1\r\n"

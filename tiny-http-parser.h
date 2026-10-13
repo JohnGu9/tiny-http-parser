@@ -5,7 +5,6 @@
 #include "tiny-http-parser-config.h"
 #endif
 
-#include "cc.h"
 #include <string.h>
 
 #ifndef TINY_HTTP_PARSER_SIZE_T // must be unsigned type
@@ -44,7 +43,8 @@ extern "C"
     TinyHttpParserStringView_t method;
     TinyHttpParserStringView_t path;
     TinyHttpParserStringView_t protocol;
-    vec(TinyHttpParserPair_t) * headers;
+    TinyHttpParserPair_t *headers_list;
+    TINY_HTTP_PARSER_SIZE_T headers_list_size;
   };
 
   struct _TinyHttpParserResponseHeader
@@ -52,7 +52,8 @@ extern "C"
     TinyHttpParserStringView_t protocol;
     TinyHttpParserStringView_t status_code;
     TinyHttpParserStringView_t reason_phrase;
-    vec(TinyHttpParserPair_t) * headers;
+    TinyHttpParserPair_t *headers_list;
+    TINY_HTTP_PARSER_SIZE_T headers_list_size;
   };
 
   struct _TinyHttpParserHeader
@@ -62,28 +63,41 @@ extern "C"
     TinyHttpParserResponseHeader_t *response_header;
   };
 
+  typedef TINY_HTTP_PARSER_SIZE_T (*tiny_http_parser_on_header_fn)(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header);                                                              // return expected body size
+  typedef TINY_HTTP_PARSER_SIZE_T (*tiny_http_parser_on_body_stream_fn)(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T remain_not_recv_size); // return override recv body size
+  typedef void (*tiny_http_parser_on_error_fn)(TinyHttpParserContext_t *context, const char *reason);
+  typedef char *(*tiny_http_parser_alloc_header_buffer_fn)(TinyHttpParserContext_t *context, TINY_HTTP_PARSER_SIZE_T *header_buffer_max_size);
+  typedef void (*tiny_http_parser_free_header_buffer_fn)(TinyHttpParserContext_t *context, char *header_buffer, TINY_HTTP_PARSER_SIZE_T header_buffer_max_size);
+
   struct _TinyHttpParserContext
   {
     void *user_context;
     int parser_status;
+
+    TinyHttpParserPair_t *headers_list;
+    TINY_HTTP_PARSER_SIZE_T headers_list_max_size;
+
     char *header_buffer;
     TINY_HTTP_PARSER_SIZE_T header_buffer_size;
     TINY_HTTP_PARSER_SIZE_T header_buffer_max_size;
     TINY_HTTP_PARSER_SIZE_T expected_body_size;
-    TINY_HTTP_PARSER_SIZE_T (*on_header)(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header);                                                              // return expected body size
-    TINY_HTTP_PARSER_SIZE_T (*on_body_stream)(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T remain_not_recv_size); // return override recv body size
-    void (*on_error)(TinyHttpParserContext_t *context, const char *reason);
-    char *(*alloc_header_buffer)(TinyHttpParserContext_t *context, TINY_HTTP_PARSER_SIZE_T *header_buffer_max_size);
-    void (*free_header_buffer)(TinyHttpParserContext_t *context, char *header_buffer, TINY_HTTP_PARSER_SIZE_T header_buffer_max_size);
+
+    tiny_http_parser_on_header_fn on_header;           // return expected body size
+    tiny_http_parser_on_body_stream_fn on_body_stream; // return override recv body size
+    tiny_http_parser_on_error_fn on_error;
+    tiny_http_parser_alloc_header_buffer_fn alloc_header_buffer;
+    tiny_http_parser_free_header_buffer_fn free_header_buffer;
   };
 
   void tiny_http_parser_init(TinyHttpParserContext_t *context,
                              void *user_context,
-                             TINY_HTTP_PARSER_SIZE_T (*on_header)(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header),
-                             TINY_HTTP_PARSER_SIZE_T (*on_body_stream)(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T remain_not_recv_size),
-                             void (*on_error)(TinyHttpParserContext_t *context, const char *reason),
-                             char *(*alloc_header_buffer)(TinyHttpParserContext_t *context, TINY_HTTP_PARSER_SIZE_T *header_buffer_max_size),
-                             void (*free_header_buffer)(TinyHttpParserContext_t *context, char *header_buffer, TINY_HTTP_PARSER_SIZE_T header_buffer_max_size));
+                             TinyHttpParserPair_t *headers_list,
+                             TINY_HTTP_PARSER_SIZE_T headers_list_max_size,
+                             tiny_http_parser_on_header_fn on_header,
+                             tiny_http_parser_on_body_stream_fn on_body_stream,
+                             tiny_http_parser_on_error_fn on_error,
+                             tiny_http_parser_alloc_header_buffer_fn alloc_header_buffer,
+                             tiny_http_parser_free_header_buffer_fn free_header_buffer);
   void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size);
   void tiny_http_parser_deinit(TinyHttpParserContext_t *context);
 
@@ -93,26 +107,40 @@ extern "C"
 
   typedef struct _TinyHttpParserMultiPartContext TinyHttpParserMultiPartContext_t;
 
+  typedef void (*tny_http_parser_multi_part_on_part_fn)(TinyHttpParserMultiPartContext_t *context,
+                                                        TinyHttpParserPair_t *headers_list,
+                                                        TINY_HTTP_PARSER_SIZE_T headers_list_size,
+                                                        const char *data, TINY_HTTP_PARSER_SIZE_T size);
+  typedef void (*tny_http_parser_multi_part_on_error_fn)(TinyHttpParserMultiPartContext_t *context, const char *reason);
+  typedef char *(*tny_http_parser_multi_part_alloc_buffer_fn)(TinyHttpParserMultiPartContext_t *context, TINY_HTTP_PARSER_SIZE_T *buffer_max_size);
+  typedef void (*tny_http_parser_multi_part_free_buffer_fn)(TinyHttpParserMultiPartContext_t *context, char *header_buffer, TINY_HTTP_PARSER_SIZE_T buffer_max_size);
+
   struct _TinyHttpParserMultiPartContext
   {
     void *user_context;
     int parser_status;
     TinyHttpParserStringView_t boundary;
+
+    TinyHttpParserPair_t *headers_list;
+    TINY_HTTP_PARSER_SIZE_T headers_list_max_size;
+
     char *buffer;
     TINY_HTTP_PARSER_SIZE_T buffer_size;
     TINY_HTTP_PARSER_SIZE_T buffer_max_size;
-    void (*on_part)(TinyHttpParserMultiPartContext_t *context, vec(TinyHttpParserPair_t) * headers, const char *data, TINY_HTTP_PARSER_SIZE_T size);
-    void (*on_error)(TinyHttpParserMultiPartContext_t *context, const char *reason);
-    char *(*alloc_multi_part_buffer)(TinyHttpParserMultiPartContext_t *context, TINY_HTTP_PARSER_SIZE_T *buffer_max_size);
-    void (*free_multi_part_buffer)(TinyHttpParserMultiPartContext_t *context, char *header_buffer, TINY_HTTP_PARSER_SIZE_T buffer_max_size);
+    tny_http_parser_multi_part_on_part_fn on_part;
+    tny_http_parser_multi_part_on_error_fn on_error;
+    tny_http_parser_multi_part_alloc_buffer_fn alloc_buffer;
+    tny_http_parser_multi_part_free_buffer_fn free_buffer;
   };
 
   void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context, const TinyHttpParserStringView_t *boundary,
                                         void *user_context,
-                                        void (*on_part)(TinyHttpParserMultiPartContext_t *context, vec(TinyHttpParserPair_t) * headers, const char *data, TINY_HTTP_PARSER_SIZE_T size),
-                                        void (*on_error)(TinyHttpParserMultiPartContext_t *context, const char *reason),
-                                        char *(*alloc_multi_part_buffer)(TinyHttpParserMultiPartContext_t *context, TINY_HTTP_PARSER_SIZE_T *buffer_max_size),
-                                        void (*free_multi_part_buffer)(TinyHttpParserMultiPartContext_t *context, char *header_buffer, TINY_HTTP_PARSER_SIZE_T buffer_max_size));
+                                        TinyHttpParserPair_t *headers_list,
+                                        TINY_HTTP_PARSER_SIZE_T headers_list_max_size,
+                                        tny_http_parser_multi_part_on_part_fn on_part,
+                                        tny_http_parser_multi_part_on_error_fn on_error,
+                                        tny_http_parser_multi_part_alloc_buffer_fn alloc_buffer,
+                                        tny_http_parser_multi_part_free_buffer_fn free_buffer);
   TINY_HTTP_PARSER_SIZE_T tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size);
   void tiny_http_parser_multi_part_deinit(TinyHttpParserMultiPartContext_t *context);
 
