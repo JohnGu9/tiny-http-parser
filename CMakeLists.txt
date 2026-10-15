@@ -25,6 +25,7 @@ else()
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_LIST_DIR)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/test)
     add_executable(thp_test ${CMAKE_CURRENT_LIST_DIR}/test.c)
-    target_link_libraries(thp_test PRIVATE thp)
+    target_link_libraries(thp_test PRIVATE thp common)
 endif()

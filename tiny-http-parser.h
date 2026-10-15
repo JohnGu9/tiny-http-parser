@@ -19,8 +19,6 @@ extern "C"
 #define tiny_http_parser_get_user_context(context, T) (T)((context)->user_context)
 #define tiny_http_parser_set_user_context(context, user_context) (context)->user_context = (void *)(user_context)
 
-  // @TODO: add Transfer-Encoding: chunked
-
   typedef struct _TinyHttpParserStringView TinyHttpParserStringView_t;
   typedef struct _TinyHttpParserPair TinyHttpParserPair_t;
   typedef struct _TinyHttpParserContext TinyHttpParserContext_t;
@@ -138,15 +136,50 @@ extern "C"
   void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
                                         const TinyHttpParserStringView_t *boundary,
                                         void *user_context,
-                                        tiny_http_parser_multi_part_on_part_fn on_part,
-                                        tiny_http_parser_multi_part_on_part_completed_fn on_part_completed,
-                                        tiny_http_parser_multi_part_on_error_fn on_error,
+                                        tiny_http_parser_multi_part_on_part_fn on_part /* nullable */,
+                                        tiny_http_parser_multi_part_on_part_completed_fn on_part_completed /* nullable */,
+                                        tiny_http_parser_multi_part_on_error_fn on_error /* nullable */,
                                         tiny_http_parser_multi_part_realloc_buffer_fn realloc_buffer,
                                         tiny_http_parser_multi_part_free_buffer_fn free_buffer);
+  /* input http "BODY" data */
   TINY_HTTP_PARSER_SIZE_T tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T *remain_not_recv_size /* nullable */);
   void tiny_http_parser_multi_part_deinit(TinyHttpParserMultiPartContext_t *context);
 
   // chunk
+  // @TODO: add Transfer-Encoding: chunked
+
+  typedef struct _TinyHttpParserChunkContext TinyHttpParserChunkContext_t;
+
+  typedef void (*tiny_http_parser_chunk_on_chunk_size_fn)(TinyHttpParserChunkContext_t *context, TINY_HTTP_PARSER_SIZE_T size);
+  typedef void (*tiny_http_parser_chunk_on_chunk_fn)(TinyHttpParserChunkContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size);
+  typedef void (*tiny_http_parser_chunk_on_error_fn)(TinyHttpParserChunkContext_t *context, const char *reason);
+  typedef void *(*tiny_http_parser_chunk_realloc_buffer_fn)(TinyHttpParserChunkContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T new_size);
+  typedef void (*tiny_http_parser_chunk_free_buffer_fn)(TinyHttpParserChunkContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T buffer_size);
+
+  struct _TinyHttpParserChunkContext
+  {
+    void *user_context;
+    int parser_status;
+    char *buffer;
+    TINY_HTTP_PARSER_SIZE_T buffer_size;
+    TINY_HTTP_PARSER_SIZE_T expected_chunk_size;
+
+    tiny_http_parser_chunk_on_chunk_size_fn on_chunk_size;
+    tiny_http_parser_chunk_on_chunk_fn on_chunk;
+    tiny_http_parser_chunk_on_error_fn on_error;
+    tiny_http_parser_chunk_realloc_buffer_fn realloc_buffer;
+    tiny_http_parser_chunk_free_buffer_fn free_buffer;
+  };
+
+  void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
+                                   void *user_context,
+                                   tiny_http_parser_chunk_on_chunk_size_fn on_chunk_size /* nullable */,
+                                   tiny_http_parser_chunk_on_chunk_fn on_chunk /* nullable */,
+                                   tiny_http_parser_chunk_on_error_fn on_error /* nullable */,
+                                   tiny_http_parser_chunk_realloc_buffer_fn realloc_buffer,
+                                   tiny_http_parser_chunk_free_buffer_fn free_buffer);
+  TINY_HTTP_PARSER_SIZE_T tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T *remain_not_recv_size /* nullable */);
+  void tiny_http_parser_chunk_deinit(TinyHttpParserChunkContext_t *context);
 
 #ifdef __cplusplus
 }
