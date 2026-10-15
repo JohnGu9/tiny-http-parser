@@ -44,7 +44,7 @@ static void on_part(TinyHttpParserMultiPartContext_t *context,
 static TINY_HTTP_PARSER_SIZE_T on_multi_part_body(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T *remain_not_recv_size)
 {
     TinyHttpParserMultiPartContext_t *const mp_context = (TinyHttpParserMultiPartContext_t *)context->user_context;
-    TINY_HTTP_PARSER_SIZE_T recv_size = tiny_http_parser_multi_part_input(mp_context, data, size, remain_not_recv_size); // tiny_http_parser_multi_part_input get the body size
+    TINY_HTTP_PARSER_SIZE_T recv_size = tiny_http_parser_multi_part_input(mp_context, data, size, remain_not_recv_size); // tiny_http_parser_multi_part_input handle the http body
     return recv_size;
 }
 
@@ -94,9 +94,6 @@ static void on_part_completed(TinyHttpParserMultiPartContext_t *context)
 {
     printf("multi part completed. \n");
     tiny_http_parser_multi_part_deinit(context);
-    // when multi part completed
-    // just deinit the context
-    // context can't be reused until reinit
 }
 
 /**
@@ -145,7 +142,7 @@ static void test_multi_part()
     TinyHttpParserMultiPartContext_t mp_context;
 
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, &mp_context, on_multi_part_message_header, on_multi_part_body, on_error, realloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, &mp_context, on_multi_part_message_header, on_multi_part_body, NULL, on_error, realloc_buffer, free_buffer);
 
     const char test_string_fragment0[] = "GET / HTTP/1.1\r\n"
                                          "Host: 192.168.7.1\r\n"
@@ -170,5 +167,4 @@ static void test_multi_part()
     tiny_http_parser_input(&context, test_string_fragment3, sizeof(test_string_fragment3) - 1);
 
     tiny_http_parser_deinit(&context);
-    tiny_http_parser_multi_part_deinit(&mp_context);
 }

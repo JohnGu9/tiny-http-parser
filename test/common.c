@@ -5,6 +5,13 @@
 
 void print_headers_list(const TinyHttpParserPair_t *headers_list, TINY_HTTP_PARSER_SIZE_T headers_list_size)
 {
+    // warning:
+    // headers_list can be null when realloc_buffer failed
+    if (headers_list == NULL)
+    {
+        printf("a null headers list with size (%zu)\n", headers_list_size);
+        return;
+    }
     for (TINY_HTTP_PARSER_SIZE_T i = 0; i < headers_list_size; i++)
     {
         const TinyHttpParserPair_t *el = &headers_list[i];
@@ -50,6 +57,12 @@ void on_error(TinyHttpParserContext_t *context, const char *reason)
 
 void *realloc_buffer(TinyHttpParserContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T new_size)
 {
+    if (new_size > 16 * 1024)
+    {
+        // you can limit the buffer in your realloc callback
+        printf("realloc_buffer: require too much memory. Refuse this requirement. ");
+        return NULL;
+    }
     void *new_buffer = realloc(buffer, new_size);
     printf("realloc_buffer: [buffer](%p) [new_buffer](%p) [new_size](%zu)\n", buffer, new_buffer, new_size);
     return new_buffer;

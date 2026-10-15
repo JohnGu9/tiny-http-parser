@@ -4,6 +4,10 @@
 #define GET_LITERAL_SIZE(literal) (sizeof(literal) - 1)
 #define FMT_LITERAL(literal) literal, GET_LITERAL_SIZE(literal)
 
+#ifndef UNUSED
+#define UNUSED(x) ((void)(x))
+#endif
+
 enum
 {
   parser_status_header,
@@ -11,18 +15,44 @@ enum
   parser_status_body,
 };
 
+static TINY_HTTP_PARSER_SIZE_T ignore_tiny_http_parser_on_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
+{
+  return tiny_http_parser_default_on_header(context, header);
+}
+
+static TINY_HTTP_PARSER_SIZE_T ignore_tiny_http_parser_on_body_stream_fn(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T *remain_not_recv_size)
+{
+  UNUSED(context);
+  UNUSED(data);
+  UNUSED(remain_not_recv_size);
+  return size;
+}
+
+static void ignore_tiny_http_parser_on_body_completed_fn(TinyHttpParserContext_t *context)
+{
+  UNUSED(context);
+}
+
+static void ignore_tiny_http_parser_on_error_fn(TinyHttpParserContext_t *context, const char *reason)
+{
+  UNUSED(context);
+  UNUSED(reason);
+}
+
 void tiny_http_parser_init(TinyHttpParserContext_t *context,
                            void *user_context,
                            tiny_http_parser_on_header_fn on_header,
                            tiny_http_parser_on_body_stream_fn on_body_stream,
+                           tiny_http_parser_on_body_completed_fn on_body_completed,
                            tiny_http_parser_on_error_fn on_error,
                            tiny_http_parser_realloc_buffer_fn realloc_buffer,
                            tiny_http_parser_free_buffer_fn free_buffer)
 {
   context->user_context = user_context;
-  context->on_header = on_header;
-  context->on_body_stream = on_body_stream;
-  context->on_error = on_error;
+  context->on_header = on_header != NULL ? on_header : ignore_tiny_http_parser_on_header;
+  context->on_body_stream = on_body_stream != NULL ? on_body_stream : ignore_tiny_http_parser_on_body_stream_fn;
+  context->on_body_completed = on_body_completed != NULL ? on_body_completed : ignore_tiny_http_parser_on_body_completed_fn;
+  context->on_error = on_error != NULL ? on_error : ignore_tiny_http_parser_on_error_fn;
   context->realloc_buffer = realloc_buffer;
   context->free_buffer = free_buffer;
   context->header_buffer = NULL;
@@ -79,11 +109,6 @@ static const char *goto_next_char(char c, const char *data, const char *data_end
     }
   }
   return data;
-}
-
-static TINY_HTTP_PARSER_SIZE_T thp_min(TINY_HTTP_PARSER_SIZE_T a, TINY_HTTP_PARSER_SIZE_T b)
-{
-  return a < b ? a : b;
 }
 
 static void get_chunk(const char *data, const char *data_end, TinyHttpParserStringView_t *string_view)
@@ -237,7 +262,12 @@ static TINY_HTTP_PARSER_SIZE_T parser_headers(TinyHttpParserContext_t *context, 
       .data = data,
       .size = size,
   };
-  if (strncmp(data, "HTTP", thp_min(size, 4)) == 0)
+  if (size < 4)
+  {
+    // @TODO: error handle
+    return 0;
+  }
+  if (strncmp(data, "HTTP", 4) == 0)
   {
     return parser_response_headers(context, &header, data, size);
   }
@@ -277,6 +307,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       }
       if (context->expected_body_size == 0)
       {
+        context->on_body_completed(context);
         context->parser_status = parser_status_header;
       }
       data = data + body_size;
@@ -302,9 +333,8 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       }
 
       TINY_HTTP_PARSER_SIZE_T header_size = (TINY_HTTP_PARSER_SIZE_T)(header_end - data);
-      TINY_HTTP_PARSER_SIZE_T body_size = parser_headers(context, data, header_size);
-      context->expected_body_size = body_size;
-      if (body_size == 0)
+      context->expected_body_size = parser_headers(context, data, header_size);
+      if (context->expected_body_size == 0)
       {
         context->parser_status = parser_status_header;
       }
@@ -337,9 +367,8 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       }
 
       TINY_HTTP_PARSER_SIZE_T header_size = (TINY_HTTP_PARSER_SIZE_T)(header_end - context->header_buffer);
-      TINY_HTTP_PARSER_SIZE_T body_size = parser_headers(context, context->header_buffer, header_size);
-      context->expected_body_size = body_size;
-      if (body_size == 0)
+      context->expected_body_size = parser_headers(context, context->header_buffer, header_size);
+      if (context->expected_body_size == 0)
       {
         context->parser_status = parser_status_header;
       }
@@ -379,7 +408,7 @@ TINY_HTTP_PARSER_SIZE_T to_size_t(const char *str, TINY_HTTP_PARSER_SIZE_T len)
   TINY_HTTP_PARSER_SIZE_T re = 0;
   for (TINY_HTTP_PARSER_SIZE_T i = len - 1;; i--)
   {
-    re = re + ((int)str[i] - 48) * mult;
+    re = re + ((int)str[i] - 0x30) * mult;
     mult = mult * 10;
     if (i == 0)
     {
@@ -388,8 +417,6 @@ TINY_HTTP_PARSER_SIZE_T to_size_t(const char *str, TINY_HTTP_PARSER_SIZE_T len)
   }
   return re;
 }
-
-#define UNUSED(x) ((void)(x))
 
 TINY_HTTP_PARSER_SIZE_T tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
@@ -421,7 +448,7 @@ TINY_HTTP_PARSER_SIZE_T tiny_http_parser_default_on_header(TinyHttpParserContext
 
 #define is_string_view_equal_to(string_view, literal) (string_view.size == (sizeof(literal) - 1) && strncmp(string_view.data, literal, sizeof(literal) - 1) == 0)
 
-    if (is_string_view_equal_to(el->key, "Transfer-Encoding") && is_string_view_equal_to(el->key, "chunked"))
+    if (is_string_view_equal_to(el->key, "Transfer-Encoding") && is_string_view_equal_to(el->value, "chunked"))
     {
       memset(&chunked_length, 0xFF, sizeof(chunked_length)); // max value of TINY_HTTP_PARSER_SIZE_T
     }
@@ -429,7 +456,7 @@ TINY_HTTP_PARSER_SIZE_T tiny_http_parser_default_on_header(TinyHttpParserContext
     {
       content_length = to_size_t(el->value.data, el->value.size);
     }
-    if (find_sub_string(el->key.data, el->key.size, FMT_LITERAL("Content-")) != NULL)
+    else if (find_sub_string(el->key.data, el->key.size, FMT_LITERAL("Content-")) != NULL)
     {
       memset(&unknown_body_size, 0xFF, sizeof(unknown_body_size)); // max value of TINY_HTTP_PARSER_SIZE_T
     }
@@ -463,7 +490,7 @@ static void ignore_tiny_http_parser_multi_part_on_part(TinyHttpParserMultiPartCo
   UNUSED(size);
 }
 
-static void ignore_tiny_http_parser_multi_part_on_part_completed(TinyHttpParserMultiPartContext_t *context)
+static void ignore_tiny_http_parser_multi_part_on_completed(TinyHttpParserMultiPartContext_t *context)
 {
   UNUSED(context);
 }
@@ -485,7 +512,7 @@ void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
                                       const TinyHttpParserStringView_t *boundary,
                                       void *user_context,
                                       tiny_http_parser_multi_part_on_part_fn on_part,
-                                      tiny_http_parser_multi_part_on_part_completed_fn on_part_completed,
+                                      tiny_http_parser_multi_part_on_completed_fn on_completed,
                                       tiny_http_parser_multi_part_on_error_fn on_error,
                                       tiny_http_parser_multi_part_realloc_buffer_fn realloc_buffer,
                                       tiny_http_parser_multi_part_free_buffer_fn free_buffer)
@@ -494,7 +521,7 @@ void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
   context->boundary = *boundary;
 
   context->on_part = on_part != NULL ? on_part : ignore_tiny_http_parser_multi_part_on_part;
-  context->on_part_completed = on_part_completed != NULL ? on_part_completed : ignore_tiny_http_parser_multi_part_on_part_completed;
+  context->on_completed = on_completed != NULL ? on_completed : ignore_tiny_http_parser_multi_part_on_completed;
   context->on_error = on_error != NULL ? on_error : ignore_tiny_http_parser_multi_part_on_error;
   context->realloc_buffer = realloc_buffer;
   context->free_buffer = free_buffer;
@@ -664,7 +691,7 @@ TINY_HTTP_PARSER_SIZE_T tiny_http_parser_multi_part_input(TinyHttpParserMultiPar
 
     if (context->parser_status == parser_multi_part_completed)
     {
-      context->on_part_completed(context);
+      context->on_completed(context);
       if (remain_not_recv_size != NULL)
       {
         *remain_not_recv_size = 0;
@@ -672,7 +699,10 @@ TINY_HTTP_PARSER_SIZE_T tiny_http_parser_multi_part_input(TinyHttpParserMultiPar
       return (TINY_HTTP_PARSER_SIZE_T)(data - data_start);
     }
   }
-
+  if (remain_not_recv_size != NULL)
+  {
+    memset(remain_not_recv_size, 0xFF, sizeof(*remain_not_recv_size));
+  }
   return full_size;
 }
 
@@ -698,6 +728,11 @@ static void ignore_tiny_http_parser_chunk_on_chunk(TinyHttpParserChunkContext_t 
   UNUSED(size);
 }
 
+static void ignore_tiny_http_parser_chunk_on_completed(TinyHttpParserChunkContext_t *context)
+{
+  UNUSED(context);
+}
+
 static void ignore_tiny_http_parser_chunk_on_error(TinyHttpParserChunkContext_t *context, const char *reason)
 {
   UNUSED(context);
@@ -717,6 +752,7 @@ void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
                                  void *user_context,
                                  tiny_http_parser_chunk_on_chunk_size_fn on_chunk_size,
                                  tiny_http_parser_chunk_on_chunk_fn on_chunk,
+                                 tiny_http_parser_chunk_on_completed_fn on_completed,
                                  tiny_http_parser_chunk_on_error_fn on_error,
                                  tiny_http_parser_chunk_realloc_buffer_fn realloc_buffer,
                                  tiny_http_parser_chunk_free_buffer_fn free_buffer)
@@ -724,6 +760,7 @@ void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
   context->user_context = user_context;
   context->on_chunk_size = on_chunk_size != NULL ? on_chunk_size : ignore_tiny_http_parser_chunk_on_chunk_size;
   context->on_chunk = on_chunk != NULL ? on_chunk : ignore_tiny_http_parser_chunk_on_chunk;
+  context->on_completed = on_completed != NULL ? on_completed : ignore_tiny_http_parser_chunk_on_completed;
   context->on_error = on_error != NULL ? on_error : ignore_tiny_http_parser_chunk_on_error;
   context->realloc_buffer = realloc_buffer;
   context->free_buffer = free_buffer;
@@ -926,12 +963,18 @@ TINY_HTTP_PARSER_SIZE_T tiny_http_parser_chunk_input(TinyHttpParserChunkContext_
 
     if (context->parser_status == parser_status_chunk_completed)
     {
+      context->on_completed(context);
       if (remain_not_recv_size != NULL)
       {
         *remain_not_recv_size = 0;
       }
       return (TINY_HTTP_PARSER_SIZE_T)(data - data_start);
     }
+  }
+
+  if (remain_not_recv_size != NULL)
+  {
+    memset(remain_not_recv_size, 0xFF, sizeof(*remain_not_recv_size));
   }
   return full_size;
 }
