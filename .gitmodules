@@ -1,0 +1,3 @@
+[submodule "kmp"]
+	path = kmp
+	url = https://github.com/JohnGu9/kmp.git
