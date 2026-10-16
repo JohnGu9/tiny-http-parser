@@ -61,15 +61,77 @@ void tiny_http_parser_init(TinyHttpParserContext_t *context,
   context->parser_status = parser_status_header;
 }
 
+static TINY_HTTP_PARSER_SIZE_T get_longest_prefix_suffix(const char *target, TINY_HTTP_PARSER_SIZE_T target_size)
+{
+  for (TINY_HTTP_PARSER_SIZE_T i = 1; i < target_size; i++)
+  {
+    if (strncmp(target, target + i, target_size - i) == 0)
+    {
+      return target_size - i;
+    }
+  }
+  return 0;
+}
+
+static void longest_prefix_suffix_table_init(TINY_HTTP_PARSER_SIZE_T *longest_prefix_suffix_table, TINY_HTTP_PARSER_SIZE_T longest_prefix_suffix_table_size,
+                                             const char *target, TINY_HTTP_PARSER_SIZE_T target_size)
+{
+  const TINY_HTTP_PARSER_SIZE_T size = longest_prefix_suffix_table_size < target_size
+                                           ? longest_prefix_suffix_table_size
+                                           : target_size;
+  for (TINY_HTTP_PARSER_SIZE_T i = 0; i < size; i++)
+  {
+    longest_prefix_suffix_table[i] = get_longest_prefix_suffix(target, i + 1);
+  }
+}
+
+static TINY_HTTP_PARSER_SIZE_T get_first_diff_char_position(const char *data, const char *target, TINY_HTTP_PARSER_SIZE_T target_size)
+{
+  for (TINY_HTTP_PARSER_SIZE_T i = 0; i < target_size; i++)
+  {
+    if (data[i] != target[i])
+    {
+      return i;
+    }
+  }
+  return target_size;
+}
+
+#ifndef MIN
+#define MIN(a, b) (a) < (b) ? (a) : (b)
+#endif
+
+#ifndef TINY_HTTP_PARSER_KMP_TABLE_SIZE
+#define TINY_HTTP_PARSER_KMP_TABLE_SIZE (sizeof(TINY_HTTP_PARSER_SIZE_T) * 8)
+#endif
+
 static const char *find_sub_string(const char *data, TINY_HTTP_PARSER_SIZE_T size, const char *target, TINY_HTTP_PARSER_SIZE_T target_size)
 {
-  if (target_size <= size)
+  if (target_size > 0 && target_size <= size)
   {
-    for (TINY_HTTP_PARSER_SIZE_T i = 0; i <= size - target_size; i++)
+    // kmp algorithm
+    TINY_HTTP_PARSER_SIZE_T longest_prefix_suffix_table[TINY_HTTP_PARSER_KMP_TABLE_SIZE] = {0};
+    longest_prefix_suffix_table_init(longest_prefix_suffix_table, TINY_HTTP_PARSER_KMP_TABLE_SIZE, target, target_size);
+    TINY_HTTP_PARSER_SIZE_T compare_start = 0;
+    for (TINY_HTTP_PARSER_SIZE_T i = 0; i <= (size - target_size);)
     {
-      if (strncmp(target, data + i, target_size) == 0)
+      TINY_HTTP_PARSER_SIZE_T first_diff_position =
+          get_first_diff_char_position(data + i + compare_start, target + compare_start, target_size - compare_start) + compare_start;
+      if (first_diff_position == target_size)
       {
         return data + i;
+      }
+      else if (first_diff_position == 0)
+      {
+        i++;
+        compare_start = 0;
+      }
+      else // 0 < first_diff_position < target_size
+      {
+        TINY_HTTP_PARSER_SIZE_T longest_prefix_suffix =
+            longest_prefix_suffix_table[MIN(first_diff_position - 1, TINY_HTTP_PARSER_KMP_TABLE_SIZE - 1)];
+        i += (first_diff_position - longest_prefix_suffix);
+        compare_start = longest_prefix_suffix;
       }
     }
   }

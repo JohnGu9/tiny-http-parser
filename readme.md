@@ -10,7 +10,7 @@ Only support CRLF.
 
 # Requirement
 
-string.h (for size_t/memcpy/memset)
+string.h (for size_t/strncmp/memcpy/memset)
 math.h (for pow)
 
 # Example

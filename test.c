@@ -91,7 +91,7 @@ static TINY_HTTP_PARSER_SIZE_T print_content_length(TinyHttpParserContext_t *con
     return body_size; // return a expected body size
 }
 
-static void on_body_completed(TinyHttpParserContext_t *context)
+static void print_body_completed(TinyHttpParserContext_t *context)
 {
     printf("http body completed\n");
 }
@@ -105,7 +105,7 @@ static void test3()
 {
     printf("\ntest3:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_content_length, print_body_stream, on_body_completed, on_error, realloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, print_content_length, print_body_stream, print_body_completed, on_error, realloc_buffer, free_buffer);
 
     const char test_string_fragment0[] = "HTTP/1.1 200 OK\r\n"
                                          "Content-Type: text/html\r\n";
