@@ -8,6 +8,7 @@ static void test();
 
 int main()
 {
+    tiny_http_parser_hook_init(realloc, free);
     test();
     return 0;
 }
@@ -61,7 +62,7 @@ static void test()
     printf("\ntest:\n");
     TinyHttpParserBodyContext_t body_context;
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, &body_context, on_header, on_body_stream, on_completed, on_error, realloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, &body_context, on_header, on_body_stream, on_completed, on_error, NULL, NULL);
 
     const char test_string_fragment0[] = "HTTP/1.1 200 OK\r\n"
                                          "Content-Type: text/html\r\n";

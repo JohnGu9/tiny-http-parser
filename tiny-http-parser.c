@@ -23,6 +23,19 @@
     (context)->on_error((context), (context)->error_reason); \
   } while (0)
 
+int tiny_http_parser_string_view_compare(const TinyHttpParserStringView_t *string_view, const char *data, size_t size)
+{
+  if (string_view->size < size)
+  {
+    return -1;
+  }
+  else if (string_view->size > size)
+  {
+    return 1;
+  }
+  return memcmp(string_view->data, data, size);
+}
+
 static tiny_http_parser_realloc_fn _tiny_http_parser_realloc = NULL;
 static tiny_http_parser_free_fn _tiny_http_parser_free = NULL;
 
@@ -76,8 +89,29 @@ static size_t _char_to_number(char c)
   case 'F':
   case 'f':
     return 15;
+  case '1':
+    return 1;
+  case '2':
+    return 2;
+  case '3':
+    return 3;
+  case '4':
+    return 4;
+  case '5':
+    return 5;
+  case '6':
+    return 6;
+  case '7':
+    return 7;
+  case '8':
+    return 8;
+  case '9':
+    return 9;
+  case '0':
   default:
-    return c - 0x30;
+  {
+    return 0;
+  }
   }
 }
 
@@ -344,7 +378,7 @@ static size_t _parser_headers(TinyHttpParserContext_t *context, const char *data
     // @TODO: error handle
     return 0;
   }
-  if (strncmp(data, "HTTP", 4) == 0)
+  if (memcmp(data, "HTTP", 4) == 0)
   {
     return _parser_response_headers(context, &header, data, size);
   }
@@ -481,15 +515,13 @@ void tiny_http_parser_deinit(TinyHttpParserContext_t *context)
   }
 }
 
-#define is_string_view_equal_to(string_view, literal) ((string_view).size == (sizeof(literal) - 1) && strncmp((string_view).data, (literal), sizeof(literal) - 1) == 0)
-
 static int _is_no_content_status_code(const TinyHttpParserStringView_t *status_code)
 {
-  if (is_string_view_equal_to(*status_code, "204")) // 204 No Content
+  if (tiny_http_parser_string_view_compare(status_code, FMT_LITERAL("204")) == 0) // 204 No Content
   {
     return 1;
   }
-  if (is_string_view_equal_to(*status_code, "304")) // 304 Not Modified
+  if (tiny_http_parser_string_view_compare(status_code, FMT_LITERAL("304")) == 0) // 304 Not Modified
   {
     return 1;
   }
@@ -533,11 +565,12 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
   {
     TinyHttpParserPair_t *el = &headers_list[i];
 
-    if (is_string_view_equal_to(el->key, "Transfer-Encoding") && is_string_view_equal_to(el->value, "chunked"))
+    if (tiny_http_parser_string_view_compare(&(el->key), FMT_LITERAL("Transfer-Encoding")) == 0 &&
+        tiny_http_parser_string_view_compare(&(el->value), FMT_LITERAL("chunked")) == 0)
     {
       memset(&chunked_length, 0xFF, sizeof(chunked_length)); // max value of size_t
     }
-    if (is_string_view_equal_to(el->key, "Content-Length"))
+    if (tiny_http_parser_string_view_compare(&(el->key), FMT_LITERAL("Content-Length")) == 0)
     {
       content_length = _string_to_unsigned_number(el->value.data, el->value.data + el->value.size, OCTAL_BASE);
     }
@@ -751,8 +784,8 @@ static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartCon
     return data;
   }
 
-  if (strncmp(data, "--", 2) != 0 ||
-      strncmp(data + 2, context->boundary.data, context->boundary.size) != 0)
+  if (memcmp(data, "--", 2) != 0 ||
+      memcmp(data + 2, context->boundary.data, context->boundary.size) != 0)
   {
     // failed to match
     // --${boundary}
@@ -760,8 +793,8 @@ static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartCon
     return NULL;
   }
   if (size >= (6 + context->boundary.size) &&
-      strncmp(data + 2 + context->boundary.size, "--", 2) == 0 &&
-      strncmp(data + 2 + context->boundary.size + 2, FMT_LITERAL(_line_end_symbol)) == 0)
+      memcmp(data + 2 + context->boundary.size, "--", 2) == 0 &&
+      memcmp(data + 2 + context->boundary.size + 2, FMT_LITERAL(_line_end_symbol)) == 0)
   {
     // end of part
     // --${boundary}--\r\n
@@ -769,7 +802,7 @@ static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartCon
     return data + 6 + context->boundary.size;
   }
   if (size >= (4 + context->boundary.size) &&
-      strncmp(data + 2 + context->boundary.size, FMT_LITERAL(_line_end_symbol)) != 0)
+      memcmp(data + 2 + context->boundary.size, FMT_LITERAL(_line_end_symbol)) != 0)
   {
     // failed to match
     // --${boundary}\r\n
@@ -780,7 +813,7 @@ static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartCon
   const char *part_end = _find_sub_string(data, size, FMT_LITERAL("\r\n--"));
   if (part_end != NULL &&
       size - (part_end - data) >= context->boundary.size &&
-      strncmp(part_end + GET_LITERAL_SIZE("\r\n--"), context->boundary.data, context->boundary.size) == 0)
+      memcmp(part_end + GET_LITERAL_SIZE("\r\n--"), context->boundary.data, context->boundary.size) == 0)
   {
     // next --${boundary} found
     size_t consume_size = part_end - data;

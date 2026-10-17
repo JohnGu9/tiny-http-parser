@@ -40,6 +40,11 @@ extern "C"
     TINY_HTTP_PARSER_SIZE_T size;
   };
 
+#define StaticTinyHttpParserStringView(literal) \
+  (TinyHttpParserStringView_t) { .data = (literal), .size = sizeof(literal) - 1, }
+
+  int tiny_http_parser_string_view_compare(const TinyHttpParserStringView_t *string_view, const char *data, size_t size);
+
   struct _TinyHttpParserPair
   {
     TinyHttpParserStringView_t raw;

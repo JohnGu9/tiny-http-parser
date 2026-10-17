@@ -50,21 +50,18 @@ static size_t on_multi_part_body(TinyHttpParserContext_t *context, const char *d
 
 static void on_part_completed(TinyHttpParserMultiPartContext_t *context);
 
-static const char boundary_string[] = "hogehoge";
-static TinyHttpParserStringView_t boundary = {
-    .data = boundary_string,
-    .size = sizeof(boundary_string) - 1,
-};
+static const TinyHttpParserStringView_t boundary = StaticTinyHttpParserStringView("hogehoge");
 
 static size_t on_multi_part_message_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
-#define is_string_view_equal_to(string_view, literal) ((string_view).size == (sizeof(literal) - 1) && strncmp(string_view.data, literal, sizeof(literal) - 1) == 0)
+#define FMT_LITERAL(literal) (literal), (sizeof(literal) - 1)
 
     for (size_t i = 0; i < header->request_header->headers_list_size; i++)
     {
-        if (is_string_view_equal_to(header->request_header->headers_list[i].key, "Content-Type"))
+        const TinyHttpParserPair_t *pair = &(header->request_header->headers_list[i]);
+        if (tiny_http_parser_string_view_compare(&(pair->key), FMT_LITERAL("Content-Type")) == 0)
         {
-            if (is_string_view_equal_to(header->request_header->headers_list[i].value, "multipart/form-data; boundary=hogehoge;"))
+            if (tiny_http_parser_string_view_compare(&(pair->value), FMT_LITERAL("multipart/form-data; boundary=hogehoge;")) == 0)
             {
                 printf("[OK]Verified header. \n");
                 TinyHttpParserMultiPartContext_t *mp_context = tiny_http_parser_get_user_context(context, TinyHttpParserMultiPartContext_t *);

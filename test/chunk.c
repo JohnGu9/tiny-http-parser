@@ -63,15 +63,16 @@ static void test_simple_chunk()
 static void on_chunk_completed(TinyHttpParserChunkContext_t *context);
 static size_t on_chunk_message_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
-#define is_string_view_equal_to(string_view, literal) ((string_view).size == (sizeof(literal) - 1) && strncmp(string_view.data, literal, sizeof(literal) - 1) == 0)
+#define FMT_LITERAL(literal) (literal), (sizeof(literal) - 1)
 
     if (header->response_header != NULL)
     {
         for (size_t i = 0; i < header->response_header->headers_list_size; i++)
         {
-            if (is_string_view_equal_to(header->response_header->headers_list[i].key, "Transfer-Encoding"))
+            const TinyHttpParserPair_t *pair = &(header->response_header->headers_list[i]);
+            if (tiny_http_parser_string_view_compare(&(pair->key), FMT_LITERAL("Transfer-Encoding")) == 0)
             {
-                if (is_string_view_equal_to(header->response_header->headers_list[i].value, "chunked"))
+                if (tiny_http_parser_string_view_compare(&(pair->value), FMT_LITERAL("chunked")) == 0)
                 {
                     printf("[OK]Verified header. \n");
                     TinyHttpParserChunkContext_t *chunk_context = tiny_http_parser_get_user_context(context, TinyHttpParserChunkContext_t *);
