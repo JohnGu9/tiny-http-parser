@@ -1,5 +1,6 @@
 #include "tiny-http-parser.h"
 #include "kmp.h"
+
 #include <math.h>
 
 #define GET_LITERAL_SIZE(literal) (sizeof(literal) - 1)
@@ -7,6 +8,10 @@
 
 #ifndef UNUSED
 #define UNUSED(x) ((void)(x))
+#endif
+
+#ifndef MAX
+#define MAX(a, b) (a) > (b) ? (a) : (b)
 #endif
 
 #define _find_sub_string find_sub_string
@@ -17,6 +22,37 @@
     (context)->error_reason = (reason);                      \
     (context)->on_error((context), (context)->error_reason); \
   } while (0)
+
+static tiny_http_parser_realloc_fn _tiny_http_parser_realloc = NULL;
+static tiny_http_parser_free_fn _tiny_http_parser_free = NULL;
+
+void tiny_http_parser_hook_init(tiny_http_parser_realloc_fn realloc, tiny_http_parser_free_fn free)
+{
+  _tiny_http_parser_realloc = realloc;
+  _tiny_http_parser_free = free;
+}
+
+#define DEFAULT_REALLOC(function_name, context_type)                               \
+  static void *function_name(context_type *context, void *buffer, size_t new_size) \
+  {                                                                                \
+    UNUSED(context);                                                               \
+    if (_tiny_http_parser_realloc != NULL)                                         \
+    {                                                                              \
+      return _tiny_http_parser_realloc(buffer, new_size);                          \
+    }                                                                              \
+    return NULL;                                                                   \
+  }
+
+#define DEFAULT_FREE(function_name, context_type)                             \
+  static void function_name(context_type *context, void *buffer, size_t size) \
+  {                                                                           \
+    UNUSED(context);                                                          \
+    UNUSED(size);                                                             \
+    if (_tiny_http_parser_free != NULL)                                       \
+    {                                                                         \
+      _tiny_http_parser_free(buffer);                                         \
+    }                                                                         \
+  }
 
 static size_t _char_to_number(char c)
 {
@@ -90,6 +126,9 @@ static void _ignore_tiny_http_parser_on_error_fn(TinyHttpParserContext_t *contex
   UNUSED(reason);
 }
 
+DEFAULT_REALLOC(_default_tiny_http_parser_realloc_buffer, TinyHttpParserContext_t);
+DEFAULT_FREE(_default_tiny_http_parser_free_buffer, TinyHttpParserContext_t);
+
 void tiny_http_parser_init(TinyHttpParserContext_t *context,
                            void *user_context,
                            tiny_http_parser_on_header_fn on_header,
@@ -104,8 +143,8 @@ void tiny_http_parser_init(TinyHttpParserContext_t *context,
   context->on_body_stream = on_body_stream != NULL ? on_body_stream : _ignore_tiny_http_parser_on_body_stream_fn;
   context->on_body_completed = on_body_completed != NULL ? on_body_completed : _ignore_tiny_http_parser_on_body_completed_fn;
   context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_on_error_fn;
-  context->realloc_buffer = realloc_buffer;
-  context->free_buffer = free_buffer;
+  context->realloc_buffer = realloc_buffer != NULL ? realloc_buffer : _default_tiny_http_parser_realloc_buffer;
+  context->free_buffer = free_buffer != NULL ? free_buffer : _default_tiny_http_parser_free_buffer;
 
   context->error_reason = NULL;
   context->parser_status = _parser_status_header;
@@ -397,8 +436,11 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       memcpy((context->header_buffer + context->header_buffer_size), data, size);
       context->header_buffer_size = new_size;
 
-      const char *header_end = _find_header_end(context->header_buffer, context->header_buffer_size); // @TODO: not to find sub string from the start
-      if (header_end == NULL)                                                                         // not completed header
+      // skip to old buffer end
+      const char *find_start = MAX(context->header_buffer, context->header_buffer + old_size - GET_LITERAL_SIZE("\r\n\r\n"));
+      const char *find_end = context->header_buffer + context->header_buffer_size;
+      const char *header_end = _find_header_end(find_start, find_end - find_start); // @TODO: not to find sub string from the start
+      if (header_end == NULL)                                                       // not completed header
       {
         data = data_end;
         break;
@@ -463,6 +505,7 @@ static int _is_no_content_status_code(const TinyHttpParserStringView_t *status_c
 size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
   UNUSED(context);
+
   TinyHttpParserPair_t *headers_list = NULL;
   TinyHttpParserStringView_t *status_code;
   size_t headers_list_size = 0;
@@ -512,7 +555,7 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
     return content_length;
   }
   if (status_code != NULL &&
-      _is_no_content_status_code(status_code))
+      _is_no_content_status_code(status_code) == 1)
   {
     return 0;
   }
@@ -534,6 +577,9 @@ static void _ignore_tiny_http_parser_body_on_error(TinyHttpParserBodyContext_t *
   UNUSED(reason);
 }
 
+DEFAULT_REALLOC(_default_tiny_http_parser_body_realloc_buffer, TinyHttpParserBodyContext_t);
+DEFAULT_FREE(_default_tiny_http_parser_body_free_buffer, TinyHttpParserBodyContext_t);
+
 void tiny_http_parser_body_init(TinyHttpParserBodyContext_t *context,
                                 void *user_context,
                                 tiny_http_parser_body_on_completed_fn on_completed,
@@ -544,8 +590,8 @@ void tiny_http_parser_body_init(TinyHttpParserBodyContext_t *context,
   context->user_context = user_context;
   context->on_completed = on_completed != NULL ? on_completed : _ignore_tiny_http_parser_body_on_completed;
   context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_body_on_error;
-  context->realloc_buffer = realloc_buffer;
-  context->free_buffer = free_buffer;
+  context->realloc_buffer = realloc_buffer != NULL ? realloc_buffer : _default_tiny_http_parser_body_realloc_buffer;
+  context->free_buffer = free_buffer != NULL ? free_buffer : _default_tiny_http_parser_body_free_buffer;
 
   context->error_reason = NULL;
   context->buffer = NULL;
@@ -634,6 +680,9 @@ enum
   _parser_multi_part_completed,
 };
 
+DEFAULT_REALLOC(_default_tiny_http_parser_multi_part_realloc_buffer, TinyHttpParserMultiPartContext_t);
+DEFAULT_FREE(_default_tiny_http_parser_multi_part_free_buffer, TinyHttpParserMultiPartContext_t);
+
 void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
                                       const TinyHttpParserStringView_t *boundary,
                                       void *user_context,
@@ -649,8 +698,8 @@ void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
   context->on_part = on_part != NULL ? on_part : _ignore_tiny_http_parser_multi_part_on_part;
   context->on_completed = on_completed != NULL ? on_completed : _ignore_tiny_http_parser_multi_part_on_completed;
   context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_multi_part_on_error;
-  context->realloc_buffer = realloc_buffer;
-  context->free_buffer = free_buffer;
+  context->realloc_buffer = realloc_buffer != NULL ? realloc_buffer : _default_tiny_http_parser_multi_part_realloc_buffer;
+  context->free_buffer = free_buffer != NULL ? free_buffer : _default_tiny_http_parser_multi_part_free_buffer;
 
   context->error_reason = NULL;
   context->parser_status = _parser_multi_part;
@@ -876,6 +925,9 @@ enum
   _parser_status_chunk_completed,
 };
 
+DEFAULT_REALLOC(_default_tiny_http_parser_chunk_realloc_buffer, TinyHttpParserChunkContext_t);
+DEFAULT_FREE(_default_tiny_http_parser_chunk_free_buffer, TinyHttpParserChunkContext_t);
+
 void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
                                  void *user_context,
                                  tiny_http_parser_chunk_on_chunk_size_fn on_chunk_size,
@@ -890,8 +942,8 @@ void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
   context->on_chunk = on_chunk != NULL ? on_chunk : _ignore_tiny_http_parser_chunk_on_chunk;
   context->on_completed = on_completed != NULL ? on_completed : _ignore_tiny_http_parser_chunk_on_completed;
   context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_chunk_on_error;
-  context->realloc_buffer = realloc_buffer;
-  context->free_buffer = free_buffer;
+  context->realloc_buffer = realloc_buffer != NULL ? realloc_buffer : _default_tiny_http_parser_chunk_realloc_buffer;
+  context->free_buffer = free_buffer != NULL ? free_buffer : _default_tiny_http_parser_chunk_free_buffer;
 
   context->error_reason = NULL;
   context->parser_status = _parser_status_chunk_header;

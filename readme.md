@@ -4,14 +4,14 @@ Pure C implement http parser.
 
 No std/system required.
 
-Design for async programming and handle TCP stick package.
+Design for async programming and handle TCP stick package problem.
 
 Only support CRLF.
 
 # Requirement
 
-string.h (for size_t/strncmp/memcpy/memset)
-math.h (for pow)
+`string.h` (for `size_t`/`strncmp()`/`memcpy()`/`memset()`)
+`math.h` (for `pow()`)
 
 # Example
 

@@ -39,8 +39,8 @@ static void test()
 
     /**
      * @brief `tiny_http_parser_get_error_reason()` only get the last error reason.
-     *        in some case, one tiny_http_parser_input may incount multi time error.
-     *        because some slight error will not stop next processes inside tiny-http-parser.
+     *        in some case, one tiny_http_parser_input may incount multi time errors.
+     *        because some slight errors would not stop next processes inside tiny-http-parser.
      *        if you want to handle this situation, register `on_error()` callback in init step.
      */
     const char *error_reason = tiny_http_parser_get_error_reason(&context);

@@ -11,6 +11,7 @@ static void test3();
 
 int main()
 {
+    tiny_http_parser_hook_init(realloc, free);
     test0();
     test1();
     test2();
@@ -27,7 +28,10 @@ static void test0()
 {
     printf("\ntest0:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_header, NULL, NULL, on_error, realloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, print_header, NULL, NULL, on_error,
+                          // already called `tiny_http_parser_hook_init()` before
+                          // we can ignore the realloc/free callback arguments
+                          NULL, NULL);
 
     const char test_string[] = "HTTP/1.1          200 OK\r\n"
                                "Content-Type: text/html\r\n"
@@ -46,7 +50,10 @@ static void test1()
 {
     printf("\ntest1:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_header, NULL, NULL, on_error, realloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, print_header, NULL, NULL, on_error,
+                          // already called `tiny_http_parser_hook_init()` before
+                          // we can ignore the realloc/free callback arguments
+                          NULL, NULL);
 
     const char test_string[] = "GET /     HTTP/1.1\r\n"
                                "Host: 192.168.7.1\r\n"
@@ -66,7 +73,9 @@ static void test2()
 {
     printf("\ntest2:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_header, NULL, NULL, on_error, realloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, print_header, NULL, NULL, on_error,
+                          // custom realloc/free callback to investigate the memory allocation situation
+                          realloc_buffer, free_buffer);
 
     const char test_string_fragment0[] = "HTTP/1.1 200 OK\r\n"
                                          "Content-";
@@ -105,7 +114,10 @@ static void test3()
 {
     printf("\ntest3:\n");
     TinyHttpParserContext_t context;
-    tiny_http_parser_init(&context, NULL, print_content_length, print_body_stream, print_body_completed, on_error, realloc_buffer, free_buffer);
+    tiny_http_parser_init(&context, NULL, print_content_length, print_body_stream, print_body_completed, on_error,
+                          // already called `tiny_http_parser_hook_init()` before
+                          // we can ignore the realloc/free callback arguments
+                          NULL, NULL);
 
     const char test_string_fragment0[] = "HTTP/1.1 200 OK\r\n"
                                          "Content-Type: text/html\r\n";

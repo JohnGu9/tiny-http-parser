@@ -16,6 +16,17 @@ extern "C"
 {
 #endif
 
+  typedef void *(*tiny_http_parser_realloc_fn)(void *buffer, size_t size);
+  typedef void (*tiny_http_parser_free_fn)(void *buffer);
+  /**
+   * @brief if you init hook, you can ignore the realloc/free callback
+   *        arguments in the init function, for example `tiny_http_parser_init()`
+   *
+   * @param realloc
+   * @param free
+   */
+  void tiny_http_parser_hook_init(tiny_http_parser_realloc_fn realloc, tiny_http_parser_free_fn free);
+
   typedef struct _TinyHttpParserStringView TinyHttpParserStringView_t;
   typedef struct _TinyHttpParserPair TinyHttpParserPair_t;
   typedef struct _TinyHttpParserContext TinyHttpParserContext_t;
@@ -93,8 +104,8 @@ extern "C"
                              tiny_http_parser_on_body_stream_fn on_body_stream /* nullable */, // return consumed data size
                              tiny_http_parser_on_body_completed_fn on_body_completed /* nullable */,
                              tiny_http_parser_on_error_fn on_error /* nullable */,
-                             tiny_http_parser_realloc_buffer_fn alloc_buffer,
-                             tiny_http_parser_free_buffer_fn free_buffer);
+                             tiny_http_parser_realloc_buffer_fn alloc_buffer /* nullable */,
+                             tiny_http_parser_free_buffer_fn free_buffer /* nullable */);
   void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, size_t size);
   void tiny_http_parser_deinit(TinyHttpParserContext_t *context);
 
@@ -133,10 +144,10 @@ extern "C"
 
   void tiny_http_parser_body_init(TinyHttpParserBodyContext_t *context,
                                   void *user_context,
-                                  tiny_http_parser_body_on_completed_fn on_completed,
-                                  tiny_http_parser_body_on_error_fn on_error,
-                                  tiny_http_parser_body_realloc_buffer_fn realloc_buffer,
-                                  tiny_http_parser_body_free_buffer_fn free_buffer);
+                                  tiny_http_parser_body_on_completed_fn on_completed /* nullable */,
+                                  tiny_http_parser_body_on_error_fn on_error /* nullable */,
+                                  tiny_http_parser_body_realloc_buffer_fn realloc_buffer /* nullable */,
+                                  tiny_http_parser_body_free_buffer_fn free_buffer /* nullable */);
   /**
    * @brief
    *
@@ -184,8 +195,8 @@ extern "C"
                                         tiny_http_parser_multi_part_on_part_fn on_part /* nullable */,
                                         tiny_http_parser_multi_part_on_completed_fn on_completed /* nullable */,
                                         tiny_http_parser_multi_part_on_error_fn on_error /* nullable */,
-                                        tiny_http_parser_multi_part_realloc_buffer_fn realloc_buffer,
-                                        tiny_http_parser_multi_part_free_buffer_fn free_buffer);
+                                        tiny_http_parser_multi_part_realloc_buffer_fn realloc_buffer /* nullable */,
+                                        tiny_http_parser_multi_part_free_buffer_fn free_buffer /* nullable */);
   size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *context, const char *data /* input http body data */, size_t size, size_t *remain_not_recv_size /* nullable */);
   void tiny_http_parser_multi_part_deinit(TinyHttpParserMultiPartContext_t *context);
 
@@ -223,8 +234,8 @@ extern "C"
                                    tiny_http_parser_chunk_on_chunk_fn on_chunk /* nullable */,
                                    tiny_http_parser_chunk_on_completed_fn on_completed /* nullable */,
                                    tiny_http_parser_chunk_on_error_fn on_error /* nullable */,
-                                   tiny_http_parser_chunk_realloc_buffer_fn realloc_buffer,
-                                   tiny_http_parser_chunk_free_buffer_fn free_buffer);
+                                   tiny_http_parser_chunk_realloc_buffer_fn realloc_buffer /* nullable */,
+                                   tiny_http_parser_chunk_free_buffer_fn free_buffer /* nullable */);
   size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const char *data /* input http "BODY" data */, size_t size, size_t *remain_not_recv_size /* nullable */);
   void tiny_http_parser_chunk_deinit(TinyHttpParserChunkContext_t *context);
 
