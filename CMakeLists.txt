@@ -4,7 +4,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_LIST_DIR)
     project(
         tiny-http-parser
         LANGUAGES C)
-    set(CMAKE_C_STANDARD 11)
+    set(CMAKE_C_STANDARD 99)
     set(CMAKE_C_STANDARD_REQUIRED ON)
     set(CMAKE_C_EXTENSIONS ON)
 
@@ -20,7 +20,7 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/kmp)
 set(thp_src ${CMAKE_CURRENT_LIST_DIR}/tiny-http-parser.c)
 add_library(thp STATIC ${thp_src})
 target_include_directories(thp PUBLIC ${CMAKE_CURRENT_LIST_DIR})
-target_link_libraries(thp PUBLIC kmp)
+target_link_libraries(thp PRIVATE kmp)
 
 if(MSVC)
 else()

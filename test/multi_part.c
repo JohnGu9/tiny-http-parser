@@ -14,14 +14,14 @@ int main()
     return 0;
 }
 
-static void *realloc_buffer_multi_part(TinyHttpParserMultiPartContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T new_size)
+static void *realloc_buffer_multi_part(TinyHttpParserMultiPartContext_t *context, void *buffer, size_t new_size)
 {
     void *new_buffer = realloc(buffer, new_size);
     printf("realloc_buffer_multi_part: [buffer](%p) [new_buffer](%p) [new_size](%zu)\n", buffer, new_buffer, new_size);
     return new_buffer;
 }
 
-static void free_buffer_multi_part(TinyHttpParserMultiPartContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T current_size)
+static void free_buffer_multi_part(TinyHttpParserMultiPartContext_t *context, void *buffer, size_t current_size)
 {
     printf("free_buffer_multi_part: [buffer](%p) [current_size](%zu)\n", buffer, current_size);
     free(buffer);
@@ -34,17 +34,17 @@ static void on_multi_part_error(TinyHttpParserMultiPartContext_t *context, const
 
 static void on_part(TinyHttpParserMultiPartContext_t *context,
                     TinyHttpParserPair_t *headers_list,
-                    TINY_HTTP_PARSER_SIZE_T headers_list_size,
-                    const char *data, TINY_HTTP_PARSER_SIZE_T size)
+                    size_t headers_list_size,
+                    const char *data, size_t size)
 {
     print_headers_list(headers_list, headers_list_size);
     printf("on_part:\n%.*s\n", (int)size, data);
 }
 
-static TINY_HTTP_PARSER_SIZE_T on_multi_part_body(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T *remain_not_recv_size)
+static size_t on_multi_part_body(TinyHttpParserContext_t *context, const char *data, size_t size, size_t *remain_not_recv_size)
 {
     TinyHttpParserMultiPartContext_t *const mp_context = (TinyHttpParserMultiPartContext_t *)context->user_context;
-    TINY_HTTP_PARSER_SIZE_T recv_size = tiny_http_parser_multi_part_input(mp_context, data, size, remain_not_recv_size); // tiny_http_parser_multi_part_input handle the http body
+    size_t recv_size = tiny_http_parser_multi_part_input(mp_context, data, size, remain_not_recv_size); // tiny_http_parser_multi_part_input handle the http body
     return recv_size;
 }
 
@@ -56,11 +56,11 @@ static TinyHttpParserStringView_t boundary = {
     .size = sizeof(boundary_string) - 1,
 };
 
-static TINY_HTTP_PARSER_SIZE_T on_multi_part_message_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
+static size_t on_multi_part_message_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
 #define is_string_view_equal_to(string_view, literal) ((string_view).size == (sizeof(literal) - 1) && strncmp(string_view.data, literal, sizeof(literal) - 1) == 0)
 
-    for (TINY_HTTP_PARSER_SIZE_T i = 0; i < header->request_header->headers_list_size; i++)
+    for (size_t i = 0; i < header->request_header->headers_list_size; i++)
     {
         if (is_string_view_equal_to(header->request_header->headers_list[i].key, "Content-Type"))
         {
@@ -85,7 +85,7 @@ static TINY_HTTP_PARSER_SIZE_T on_multi_part_message_header(TinyHttpParserContex
         }
     }
     print_header(context, header);
-    TINY_HTTP_PARSER_SIZE_T body_size = tiny_http_parser_default_on_header(context, header); // default handle get the body size from http headers
+    size_t body_size = tiny_http_parser_default_on_header(context, header); // default handle get the body size from http headers
     printf("body_size: %zu\n", body_size);
     return body_size;
 }

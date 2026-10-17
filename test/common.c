@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void print_headers_list(const TinyHttpParserPair_t *headers_list, TINY_HTTP_PARSER_SIZE_T headers_list_size)
+void print_headers_list(const TinyHttpParserPair_t *headers_list, size_t headers_list_size)
 {
     // warning:
     // headers_list can be null when realloc_buffer failed
@@ -12,14 +12,14 @@ void print_headers_list(const TinyHttpParserPair_t *headers_list, TINY_HTTP_PARS
         printf("a null headers list with size (%zu)\n", headers_list_size);
         return;
     }
-    for (TINY_HTTP_PARSER_SIZE_T i = 0; i < headers_list_size; i++)
+    for (size_t i = 0; i < headers_list_size; i++)
     {
         const TinyHttpParserPair_t *el = &headers_list[i];
         printf("%.*s: %.*s\n", FMT_STRING_VIEW(el->key), FMT_STRING_VIEW(el->value));
     }
 }
 
-TINY_HTTP_PARSER_SIZE_T print_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
+size_t print_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
     if (header->response_header != NULL)
     {
@@ -44,7 +44,7 @@ TINY_HTTP_PARSER_SIZE_T print_header(TinyHttpParserContext_t *context, const Tin
     return 0;
 }
 
-TINY_HTTP_PARSER_SIZE_T print_body_stream(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T *remain_not_recv_size)
+size_t print_body_stream(TinyHttpParserContext_t *context, const char *data, size_t size, size_t *remain_not_recv_size)
 {
     printf("size: %zu remain_not_recv_size: %zu data: \n%.*s\n", size, *remain_not_recv_size, (int)size, data);
     return size;
@@ -55,7 +55,7 @@ void on_error(TinyHttpParserContext_t *context, const char *reason)
     printf("on_error: %s\n", reason);
 }
 
-void *realloc_buffer(TinyHttpParserContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T new_size)
+void *realloc_buffer(TinyHttpParserContext_t *context, void *buffer, size_t new_size)
 {
     if (new_size > 16 * 1024)
     {
@@ -68,7 +68,7 @@ void *realloc_buffer(TinyHttpParserContext_t *context, void *buffer, TINY_HTTP_P
     return new_buffer;
 }
 
-void free_buffer(TinyHttpParserContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T current_size)
+void free_buffer(TinyHttpParserContext_t *context, void *buffer, size_t current_size)
 {
     printf("free_buffer: [buffer](%p) [current_size](%zu)\n", buffer, current_size);
     free(buffer);

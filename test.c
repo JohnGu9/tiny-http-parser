@@ -83,10 +83,10 @@ static void test2()
     tiny_http_parser_deinit(&context);
 }
 
-static TINY_HTTP_PARSER_SIZE_T print_content_length(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
+static size_t print_content_length(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
     print_header(context, header);
-    TINY_HTTP_PARSER_SIZE_T body_size = tiny_http_parser_default_on_header(context, header); // default handle get the body size from http headers
+    size_t body_size = tiny_http_parser_default_on_header(context, header); // default handle get the body size from http headers
     printf("body_size: %zu\n", body_size);
     return body_size; // return a expected body size
 }

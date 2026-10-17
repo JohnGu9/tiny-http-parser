@@ -14,25 +14,25 @@ int main()
     return 0;
 }
 
-static void *realloc_buffer_chunk(TinyHttpParserChunkContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T new_size)
+static void *realloc_buffer_chunk(TinyHttpParserChunkContext_t *context, void *buffer, size_t new_size)
 {
     void *new_buffer = realloc(buffer, new_size);
     printf("realloc_buffer_chunk: [buffer](%p) [new_buffer](%p) [new_size](%zu)\n", buffer, new_buffer, new_size);
     return new_buffer;
 }
 
-static void free_buffer_chunk(TinyHttpParserChunkContext_t *context, void *buffer, TINY_HTTP_PARSER_SIZE_T current_size)
+static void free_buffer_chunk(TinyHttpParserChunkContext_t *context, void *buffer, size_t current_size)
 {
     printf("free_buffer_chunk: [buffer](%p) [current_size](%zu)\n", buffer, current_size);
     free(buffer);
 }
 
-static void print_chunk_size(TinyHttpParserChunkContext_t *context, TINY_HTTP_PARSER_SIZE_T size)
+static void print_chunk_size(TinyHttpParserChunkContext_t *context, size_t size)
 {
     printf("[chunk size](%zu)\n", size);
 }
 
-static void print_chunk(TinyHttpParserChunkContext_t *context, const char *buffer, TINY_HTTP_PARSER_SIZE_T size)
+static void print_chunk(TinyHttpParserChunkContext_t *context, const char *buffer, size_t size)
 {
     printf("[chunk](%zu) %.*s\n", size, (int)size, buffer);
 }
@@ -61,13 +61,13 @@ static void test_simple_chunk()
 }
 
 static void on_chunk_completed(TinyHttpParserChunkContext_t *context);
-static TINY_HTTP_PARSER_SIZE_T on_chunk_message_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
+static size_t on_chunk_message_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header)
 {
 #define is_string_view_equal_to(string_view, literal) ((string_view).size == (sizeof(literal) - 1) && strncmp(string_view.data, literal, sizeof(literal) - 1) == 0)
 
     if (header->response_header != NULL)
     {
-        for (TINY_HTTP_PARSER_SIZE_T i = 0; i < header->response_header->headers_list_size; i++)
+        for (size_t i = 0; i < header->response_header->headers_list_size; i++)
         {
             if (is_string_view_equal_to(header->response_header->headers_list[i].key, "Transfer-Encoding"))
             {
@@ -92,7 +92,7 @@ static TINY_HTTP_PARSER_SIZE_T on_chunk_message_header(TinyHttpParserContext_t *
         }
     }
     print_header(context, header);
-    TINY_HTTP_PARSER_SIZE_T body_size = tiny_http_parser_default_on_header(context, header); // default handle get the body size from http headers
+    size_t body_size = tiny_http_parser_default_on_header(context, header); // default handle get the body size from http headers
     printf("body_size: %zu\n", body_size);
     return body_size;
 }
@@ -103,10 +103,10 @@ static void on_chunk_completed(TinyHttpParserChunkContext_t *context)
     tiny_http_parser_chunk_deinit(context);
 }
 
-static TINY_HTTP_PARSER_SIZE_T on_chunk_body(TinyHttpParserContext_t *context, const char *data, TINY_HTTP_PARSER_SIZE_T size, TINY_HTTP_PARSER_SIZE_T *remain_not_recv_size)
+static size_t on_chunk_body(TinyHttpParserContext_t *context, const char *data, size_t size, size_t *remain_not_recv_size)
 {
     TinyHttpParserChunkContext_t *const chunk_context = tiny_http_parser_get_user_context(context, TinyHttpParserChunkContext_t *);
-    TINY_HTTP_PARSER_SIZE_T recv_size = tiny_http_parser_chunk_input(chunk_context, data, size, remain_not_recv_size); // tiny_http_parser_multi_part_input get the body size
+    size_t recv_size = tiny_http_parser_chunk_input(chunk_context, data, size, remain_not_recv_size); // tiny_http_parser_multi_part_input get the body size
     return recv_size;
 }
 
