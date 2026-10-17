@@ -11,6 +11,13 @@
 
 #define _find_sub_string find_sub_string
 
+#define _invoke_on_error(context, reason)                    \
+  do                                                         \
+  {                                                          \
+    (context)->error_reason = (reason);                      \
+    (context)->on_error((context), (context)->error_reason); \
+  } while (0)
+
 static size_t _char_to_number(char c)
 {
   switch (c)
@@ -99,10 +106,12 @@ void tiny_http_parser_init(TinyHttpParserContext_t *context,
   context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_on_error_fn;
   context->realloc_buffer = realloc_buffer;
   context->free_buffer = free_buffer;
+
+  context->error_reason = NULL;
+  context->parser_status = _parser_status_header;
   context->header_buffer = NULL;
   context->header_buffer_size = 0;
   context->expected_body_size = 0;
-  context->parser_status = _parser_status_header;
 }
 
 static const char *_find_header_end(const char *data, size_t size)
@@ -244,7 +253,7 @@ static size_t _parser_response_headers(TinyHttpParserContext_t *context,
   }
   else
   {
-    context->on_error(context, "http alloc header buffer failed. ");
+    _invoke_on_error(context, "http alloc headers list buffer failed");
     expected_body_size = context->on_header(context, header);
   }
   return expected_body_size;
@@ -278,7 +287,7 @@ static size_t _parser_request_headers(TinyHttpParserContext_t *context,
   }
   else
   {
-    context->on_error(context, "http alloc header buffer failed. ");
+    _invoke_on_error(context, "http alloc headers list buffer failed");
     expected_body_size = context->on_header(context, header);
   }
   return expected_body_size;
@@ -350,7 +359,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
         void *new_buffer = context->realloc_buffer(context, context->header_buffer, size);
         if (new_buffer == NULL)
         {
-          context->on_error(context, "http alloc header buffer failed. ");
+          _invoke_on_error(context, "http alloc header buffer failed");
           return; // critical error, can't continue
         }
         context->header_buffer = (char *)new_buffer;
@@ -381,7 +390,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       void *new_buffer = context->realloc_buffer(context, context->header_buffer, new_size);
       if (new_buffer == NULL)
       {
-        context->on_error(context, "http alloc header buffer failed. ");
+        _invoke_on_error(context, "http alloc header buffer failed");
         return; // critical error, can't continue
       }
       context->header_buffer = (char *)new_buffer;
@@ -532,14 +541,15 @@ void tiny_http_parser_body_init(TinyHttpParserBodyContext_t *context,
                                 tiny_http_parser_body_realloc_buffer_fn realloc_buffer,
                                 tiny_http_parser_body_free_buffer_fn free_buffer)
 {
-  context->buffer = NULL;
-  context->buffer_size = 0;
-
   context->user_context = user_context;
   context->on_completed = on_completed != NULL ? on_completed : _ignore_tiny_http_parser_body_on_completed;
   context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_body_on_error;
   context->realloc_buffer = realloc_buffer;
   context->free_buffer = free_buffer;
+
+  context->error_reason = NULL;
+  context->buffer = NULL;
+  context->buffer_size = 0;
 }
 
 size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const char *data /* input http body data */, size_t size, size_t *remain_not_recv_size /* nullable */)
@@ -547,10 +557,15 @@ size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const c
   if (data == NULL)
   {
     context->on_completed(context, context->buffer, context->buffer_size);
-    *remain_not_recv_size = 0;
+    if (remain_not_recv_size != NULL)
+    {
+      *remain_not_recv_size = 0;
+    }
     return 0;
   }
-  if (context->buffer == NULL && *remain_not_recv_size == 0)
+  if (context->buffer == NULL &&
+      remain_not_recv_size != NULL &&
+      *remain_not_recv_size == 0)
   {
     context->on_completed(context, data, size);
     return size;
@@ -561,7 +576,7 @@ size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const c
   void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
   if (new_buffer == NULL)
   {
-    context->on_error(context, "http body parser alloc buffer failed. ");
+    _invoke_on_error(context, "http body parser alloc buffer failed");
     return 0;
   }
 
@@ -569,7 +584,8 @@ size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const c
   memcpy(context->buffer + old_size, data, size);
   context->buffer_size = new_size;
 
-  if (*remain_not_recv_size == 0)
+  if (remain_not_recv_size != NULL &&
+      *remain_not_recv_size == 0)
   {
     context->on_completed(context, context->buffer, context->buffer_size);
     context->free_buffer(context, context->buffer, context->buffer_size);
@@ -636,6 +652,7 @@ void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
   context->realloc_buffer = realloc_buffer;
   context->free_buffer = free_buffer;
 
+  context->error_reason = NULL;
   context->parser_status = _parser_multi_part;
   context->buffer = NULL;
   context->buffer_size = 0;
@@ -658,7 +675,7 @@ static void _thp_multi_part_parser_part(TinyHttpParserMultiPartContext_t *contex
     }
     else
     {
-      context->on_error(context, "http multi part parser alloc buffer failed. ");
+      _invoke_on_error(context, "http multi part parser alloc headers list buffer failed");
     }
     body_start = part_header_end;
   }
@@ -672,6 +689,7 @@ static void _thp_multi_part_parser_part(TinyHttpParserMultiPartContext_t *contex
   {
     context->free_buffer(context, context->headers_list, sizeof(TinyHttpParserPair_t) * context->headers_list_size);
     context->headers_list = NULL;
+    context->headers_list_size = 0;
   }
 }
 
@@ -689,7 +707,7 @@ static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartCon
   {
     // failed to match
     // --${boundary}
-    context->on_error(context, "http multi part parser failed. ");
+    _invoke_on_error(context, "http multi part parser failed");
     return NULL;
   }
   if (size >= (6 + context->boundary.size) &&
@@ -706,7 +724,7 @@ static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartCon
   {
     // failed to match
     // --${boundary}\r\n
-    context->on_error(context, "http multi part parser failed. ");
+    _invoke_on_error(context, "http multi part parser failed");
     return NULL;
   }
 
@@ -745,7 +763,7 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
         if (new_buffer == NULL)
         {
-          context->on_error(context, "http multi part parser alloc buffer failed. ");
+          _invoke_on_error(context, "http multi part parser alloc buffer failed");
           data = NULL;
           break;
         }
@@ -769,7 +787,7 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_buffer == NULL)
       {
-        context->on_error(context, "http multi part parser alloc buffer failed. ");
+        _invoke_on_error(context, "http multi part parser alloc buffer failed");
         data = NULL;
         break;
       }
@@ -875,6 +893,7 @@ void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
   context->realloc_buffer = realloc_buffer;
   context->free_buffer = free_buffer;
 
+  context->error_reason = NULL;
   context->parser_status = _parser_status_chunk_header;
   context->buffer = NULL;
   context->buffer_size = 0;
@@ -913,7 +932,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
         if (context->buffer == NULL)
         {
-          context->on_error(context, "http multi part parser alloc buffer failed. ");
+          _invoke_on_error(context, "http multi part parser alloc buffer failed");
           data = NULL;
           break;
         }
@@ -937,7 +956,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_buffer == NULL)
       {
-        context->on_error(context, "http multi part parser alloc buffer failed. ");
+        _invoke_on_error(context, "http multi part parser alloc buffer failed");
         data = NULL;
         break;
       }
@@ -969,7 +988,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
         if (new_buffer == NULL)
         {
-          context->on_error(context, "http multi part parser alloc buffer failed. ");
+          _invoke_on_error(context, "http multi part parser alloc buffer failed");
           data = NULL;
           break;
         }
@@ -999,7 +1018,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_buffer == NULL)
       {
-        context->on_error(context, "http multi part parser alloc buffer failed. ");
+        _invoke_on_error(context, "http multi part parser alloc buffer failed");
         data = NULL;
         break;
       }

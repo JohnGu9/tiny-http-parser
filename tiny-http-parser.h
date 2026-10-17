@@ -16,9 +16,6 @@ extern "C"
 {
 #endif
 
-#define tiny_http_parser_get_user_context(context, T) (T)((context)->user_context)
-#define tiny_http_parser_set_user_context(context, user_context) (context)->user_context = (void *)(user_context)
-
   typedef struct _TinyHttpParserStringView TinyHttpParserStringView_t;
   typedef struct _TinyHttpParserPair TinyHttpParserPair_t;
   typedef struct _TinyHttpParserContext TinyHttpParserContext_t;
@@ -74,6 +71,7 @@ extern "C"
   struct _TinyHttpParserContext
   {
     void *user_context;
+    const char *error_reason;
     int parser_status;
 
     char *header_buffer;
@@ -100,6 +98,12 @@ extern "C"
   void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, size_t size);
   void tiny_http_parser_deinit(TinyHttpParserContext_t *context);
 
+  // helper function
+
+#define tiny_http_parser_get_user_context(context, T) (T)((context)->user_context)
+#define tiny_http_parser_set_user_context(context, user_context) (context)->user_context = (void *)(user_context)
+#define tiny_http_parser_get_error_reason(context) ((context)->error_reason)
+
   size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header);
 
   // extension
@@ -116,6 +120,8 @@ extern "C"
   struct _TinyHttpParserBodyContext
   {
     void *user_context;
+    const char *error_reason;
+
     char *buffer;
     size_t buffer_size;
 
@@ -155,6 +161,7 @@ extern "C"
   struct _TinyHttpParserMultiPartContext
   {
     void *user_context;
+    const char *error_reason;
     int parser_status;
     TinyHttpParserStringView_t boundary;
 
@@ -196,6 +203,7 @@ extern "C"
   struct _TinyHttpParserChunkContext
   {
     void *user_context;
+    const char *error_reason;
     int parser_status;
     char *buffer;
     size_t buffer_size;

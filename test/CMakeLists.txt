@@ -12,3 +12,6 @@ target_link_libraries(chunk_test PRIVATE thp common)
 
 add_executable(body_test ${CMAKE_CURRENT_LIST_DIR}/body.c)
 target_link_libraries(body_test PRIVATE thp common)
+
+add_executable(how_to_handle_error ${CMAKE_CURRENT_LIST_DIR}/how-to-handle-error.c)
+target_link_libraries(how_to_handle_error PRIVATE thp common)
