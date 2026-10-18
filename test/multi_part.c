@@ -33,7 +33,7 @@ static void on_multi_part_error(TinyHttpParserMultiPartContext_t *context, const
 }
 
 static void on_part(TinyHttpParserMultiPartContext_t *context,
-                    TinyHttpParserPair_t *headers_list,
+                    const TinyHttpParserPair_t *headers_list,
                     size_t headers_list_size,
                     const char *data, size_t size)
 {

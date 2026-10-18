@@ -317,12 +317,13 @@ static size_t _parser_response_headers(TinyHttpParserContext_t *context,
 
   const char *data_end = data + size;
   response.headers_list_size = _get_headers_list_size(line_start, data_end);
-  response.headers_list = context->realloc_buffer(context, NULL, sizeof(TinyHttpParserPair_t) * response.headers_list_size);
-  if (response.headers_list != NULL)
+  TinyHttpParserPair_t *headers_list = context->realloc_buffer(context, NULL, sizeof(TinyHttpParserPair_t) * response.headers_list_size);
+  if (headers_list != NULL)
   {
-    _parser_optional_headers(response.headers_list, response.headers_list_size, line_start, data_end);
+    _parser_optional_headers(headers_list, response.headers_list_size, line_start, data_end);
+    response.headers_list = headers_list;
     expected_body_size = context->on_header(context, header);
-    context->free_buffer(context, response.headers_list, sizeof(TinyHttpParserPair_t) * response.headers_list_size);
+    context->free_buffer(context, headers_list, sizeof(TinyHttpParserPair_t) * response.headers_list_size);
   }
   else
   {
@@ -351,12 +352,13 @@ static size_t _parser_request_headers(TinyHttpParserContext_t *context,
 
   const char *data_end = data + size;
   request.headers_list_size = _get_headers_list_size(line_start, data_end);
-  request.headers_list = context->realloc_buffer(context, NULL, sizeof(TinyHttpParserPair_t) * request.headers_list_size);
-  if (request.headers_list != NULL)
+  TinyHttpParserPair_t *headers_list = context->realloc_buffer(context, NULL, sizeof(TinyHttpParserPair_t) * request.headers_list_size);
+  if (headers_list != NULL)
   {
-    _parser_optional_headers(request.headers_list, request.headers_list_size, line_start, data_end);
+    _parser_optional_headers(headers_list, request.headers_list_size, line_start, data_end);
+    request.headers_list = headers_list;
     expected_body_size = context->on_header(context, header);
-    context->free_buffer(context, request.headers_list, sizeof(TinyHttpParserPair_t) * request.headers_list_size);
+    context->free_buffer(context, headers_list, sizeof(TinyHttpParserPair_t) * request.headers_list_size);
   }
   else
   {
@@ -538,7 +540,7 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
 {
   UNUSED(context);
 
-  TinyHttpParserPair_t *headers_list = NULL;
+  const TinyHttpParserPair_t *headers_list = NULL;
   TinyHttpParserStringView_t *status_code;
   size_t headers_list_size = 0;
   if (header->response_header != NULL)
@@ -563,7 +565,7 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
 
   for (size_t i = 0; i < headers_list_size; i++)
   {
-    TinyHttpParserPair_t *el = &headers_list[i];
+    const TinyHttpParserPair_t *el = &headers_list[i];
 
     if (tiny_http_parser_string_view_compare(&(el->key), FMT_LITERAL("Transfer-Encoding")) == 0 &&
         tiny_http_parser_string_view_compare(&(el->value), FMT_LITERAL("chunked")) == 0)
@@ -684,7 +686,7 @@ void tiny_http_parser_body_deinit(TinyHttpParserBodyContext_t *context)
 }
 
 static void _ignore_tiny_http_parser_multi_part_on_part(TinyHttpParserMultiPartContext_t *context,
-                                                        TinyHttpParserPair_t *headers_list,
+                                                        const TinyHttpParserPair_t *headers_list,
                                                         size_t headers_list_size,
                                                         const char *data, size_t size)
 {
@@ -726,7 +728,7 @@ void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
                                       tiny_http_parser_multi_part_free_buffer_fn free_buffer)
 {
   context->user_context = user_context;
-  context->boundary = *boundary;
+  context->boundary = boundary;
 
   context->on_part = on_part != NULL ? on_part : _ignore_tiny_http_parser_multi_part_on_part;
   context->on_completed = on_completed != NULL ? on_completed : _ignore_tiny_http_parser_multi_part_on_completed;
@@ -738,22 +740,24 @@ void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
   context->parser_status = _parser_multi_part;
   context->buffer = NULL;
   context->buffer_size = 0;
-  context->headers_list = NULL;
-  context->headers_list_size = 0;
 }
 
 static void _thp_multi_part_parser_part(TinyHttpParserMultiPartContext_t *context, const char *data, size_t size)
 {
-  const char *part_header_start = data + 2 + context->boundary.size + 2; // skip --${boundary}\r\n
+  size_t headers_list_size = 0;
+  TinyHttpParserPair_t *headers_list = NULL;
+
+  const char *part_header_start = data + 2 + context->boundary->size + 2; // skip --${boundary}\r\n
   const char *part_header_end = _find_header_end(data, size);
+
   const char *body_start;
   if (part_header_end != NULL) // has headers
   {
-    context->headers_list_size = _get_headers_list_size(part_header_start, part_header_end);
-    context->headers_list = context->realloc_buffer(context, context->headers_list, sizeof(TinyHttpParserPair_t) * context->headers_list_size);
-    if (context->headers_list != NULL)
+    headers_list_size = _get_headers_list_size(part_header_start, part_header_end);
+    headers_list = context->realloc_buffer(context, headers_list, sizeof(TinyHttpParserPair_t) * headers_list_size);
+    if (headers_list != NULL)
     {
-      _parser_optional_headers(context->headers_list, context->headers_list_size, part_header_start, part_header_end);
+      _parser_optional_headers(headers_list, headers_list_size, part_header_start, part_header_end);
     }
     else
     {
@@ -765,44 +769,42 @@ static void _thp_multi_part_parser_part(TinyHttpParserMultiPartContext_t *contex
   {
     body_start = part_header_start;
   }
-  context->on_part(context, context->headers_list, context->headers_list_size, body_start, size - (body_start - data));
+  context->on_part(context, headers_list, headers_list_size, body_start, size - (body_start - data));
 
-  if (context->headers_list != NULL)
+  if (headers_list != NULL)
   {
-    context->free_buffer(context, context->headers_list, sizeof(TinyHttpParserPair_t) * context->headers_list_size);
-    context->headers_list = NULL;
-    context->headers_list_size = 0;
+    context->free_buffer(context, headers_list, sizeof(TinyHttpParserPair_t) * headers_list_size);
   }
 }
 
 static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *context, const char *data, const char *data_end)
 {
   const size_t size = data_end - data;
-  if (size < (2 + context->boundary.size))
+  if (size < (2 + context->boundary->size))
   {
     // not completed data
     return data;
   }
 
   if (memcmp(data, "--", 2) != 0 ||
-      memcmp(data + 2, context->boundary.data, context->boundary.size) != 0)
+      memcmp(data + 2, context->boundary->data, context->boundary->size) != 0)
   {
     // failed to match
     // --${boundary}
     _invoke_on_error(context, "http multi part parser failed");
     return NULL;
   }
-  if (size >= (6 + context->boundary.size) &&
-      memcmp(data + 2 + context->boundary.size, "--", 2) == 0 &&
-      memcmp(data + 2 + context->boundary.size + 2, FMT_LITERAL(_line_end_symbol)) == 0)
+  if (size >= (6 + context->boundary->size) &&
+      memcmp(data + 2 + context->boundary->size, "--", 2) == 0 &&
+      memcmp(data + 2 + context->boundary->size + 2, FMT_LITERAL(_line_end_symbol)) == 0)
   {
     // end of part
     // --${boundary}--\r\n
     context->parser_status = _parser_multi_part_completed;
-    return data + 6 + context->boundary.size;
+    return data + 6 + context->boundary->size;
   }
-  if (size >= (4 + context->boundary.size) &&
-      memcmp(data + 2 + context->boundary.size, FMT_LITERAL(_line_end_symbol)) != 0)
+  if (size >= (4 + context->boundary->size) &&
+      memcmp(data + 2 + context->boundary->size, FMT_LITERAL(_line_end_symbol)) != 0)
   {
     // failed to match
     // --${boundary}\r\n
@@ -812,8 +814,8 @@ static const char *_tiny_http_parser_multi_part_input(TinyHttpParserMultiPartCon
 
   const char *part_end = _find_sub_string(data, size, FMT_LITERAL("\r\n--"));
   if (part_end != NULL &&
-      size - (part_end - data) >= context->boundary.size &&
-      memcmp(part_end + GET_LITERAL_SIZE("\r\n--"), context->boundary.data, context->boundary.size) == 0)
+      size - (part_end - data) >= context->boundary->size &&
+      memcmp(part_end + GET_LITERAL_SIZE("\r\n--"), context->boundary->data, context->boundary->size) == 0)
   {
     // next --${boundary} found
     size_t consume_size = part_end - data;

@@ -57,7 +57,7 @@ extern "C"
     TinyHttpParserStringView_t method;
     TinyHttpParserStringView_t path;
     TinyHttpParserStringView_t protocol;
-    TinyHttpParserPair_t *headers_list;
+    const TinyHttpParserPair_t *headers_list;
     size_t headers_list_size;
   };
 
@@ -66,7 +66,7 @@ extern "C"
     TinyHttpParserStringView_t protocol;
     TinyHttpParserStringView_t status_code;
     TinyHttpParserStringView_t reason_phrase;
-    TinyHttpParserPair_t *headers_list;
+    const TinyHttpParserPair_t *headers_list;
     size_t headers_list_size;
   };
 
@@ -166,7 +166,7 @@ extern "C"
   typedef struct _TinyHttpParserMultiPartContext TinyHttpParserMultiPartContext_t;
 
   typedef void (*tiny_http_parser_multi_part_on_part_fn)(TinyHttpParserMultiPartContext_t *context,
-                                                         TinyHttpParserPair_t *headers_list,
+                                                         const TinyHttpParserPair_t *headers_list,
                                                          size_t headers_list_size,
                                                          const char *data, size_t size);
   typedef void (*tiny_http_parser_multi_part_on_completed_fn)(TinyHttpParserMultiPartContext_t *context);
@@ -179,10 +179,7 @@ extern "C"
     void *user_context;
     const char *error_reason;
     int parser_status;
-    TinyHttpParserStringView_t boundary;
-
-    TinyHttpParserPair_t *headers_list;
-    size_t headers_list_size;
+    const TinyHttpParserStringView_t *boundary;
 
     char *buffer;
     size_t buffer_size;
