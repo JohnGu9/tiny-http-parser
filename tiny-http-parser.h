@@ -29,7 +29,6 @@ extern "C"
 
   typedef struct _TinyHttpParserStringView TinyHttpParserStringView_t;
   typedef struct _TinyHttpParserPair TinyHttpParserPair_t;
-  typedef struct _TinyHttpParserContext TinyHttpParserContext_t;
   typedef struct _TinyHttpParserHeader TinyHttpParserHeader_t;
   typedef struct _TinyHttpParserRequestHeader TinyHttpParserRequestHeader_t;
   typedef struct _TinyHttpParserResponseHeader TinyHttpParserResponseHeader_t;
@@ -76,6 +75,8 @@ extern "C"
     TinyHttpParserRequestHeader_t *request_header;
     TinyHttpParserResponseHeader_t *response_header;
   };
+
+  typedef struct _TinyHttpParserContext TinyHttpParserContext_t;
 
   typedef size_t (*tiny_http_parser_on_header_fn)(TinyHttpParserContext_t *context, const TinyHttpParserHeader_t *header);                                                                          // return expected body size
   typedef size_t (*tiny_http_parser_on_body_stream_fn)(TinyHttpParserContext_t *context, const char *data, size_t size, size_t *remain_not_recv_size /* override the remain expected body size */); // return consumed data size

@@ -11,7 +11,6 @@ Only support CRLF.
 # Requirement
 
 `string.h` (for `size_t`/`memcmp()`/`memcpy()`/`memset()`)
-`math.h` (for `pow()`)
 
 # Example
 

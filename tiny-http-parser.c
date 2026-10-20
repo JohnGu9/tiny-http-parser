@@ -2,7 +2,6 @@
 #include "kmp.h"
 
 #include <assert.h>
-#include <math.h>
 
 #define GET_LITERAL_SIZE(literal) (sizeof(literal) - 1)
 #define FMT_LITERAL(literal) literal, GET_LITERAL_SIZE(literal)

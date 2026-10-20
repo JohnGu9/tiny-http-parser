@@ -169,7 +169,7 @@ static size_t _onHttpHeader(TinyHttpParserContext_t *context, const TinyHttpPars
     {
         // already has error
         // no more further process
-        return 0;
+        return SIZE_MAX; // push all rest data to `_onHttpBodyStream()`
     }
 
     const TinyHttpParserStringView_t *wsKey = nullptr;
@@ -197,6 +197,7 @@ static size_t _onHttpHeader(TinyHttpParserContext_t *context, const TinyHttpPars
     char accept_key[WEBSOCKET_ACCEPT_KEY_SIZE];
     size_t accept_key_size = websocket_accept(wsKey->data, accept_key);
     assert(accept_key_size == WEBSOCKET_ACCEPT_KEY_SIZE);
+    printf("[Sec-WebSocket-Accept]%.*s (%zu)\n", (int)accept_key_size, accept_key, accept_key_size);
 
     const char *response = "HTTP/1.1 101 Switching Protocols\r\n"
                            "Upgrade: websocket\r\n"
@@ -204,7 +205,6 @@ static size_t _onHttpHeader(TinyHttpParserContext_t *context, const TinyHttpPars
                            "Sec-WebSocket-Accept: ";
     const char *end = "\r\n\r\n";
     send(clientContext->fd, response, strlen(response), 0);
-    printf("[Sec-WebSocket-Accept]%.*s (%zu)\n", (int)accept_key_size, accept_key, accept_key_size);
     send(clientContext->fd, accept_key, accept_key_size, 0);
     send(clientContext->fd, end, strlen(end), 0);
 
@@ -289,9 +289,7 @@ static void _closeClient(int fd, FdList *list)
 static void _onClientEvent(int fd, short revent, FdList *list)
 {
     char buf[512]; // Buffer for client data
-
     int nbytes = recv(fd, buf, sizeof buf, 0);
-
     if (nbytes <= 0)
     {
         // Got error or connection closed by client
@@ -308,7 +306,8 @@ static void _onClientEvent(int fd, short revent, FdList *list)
         _closeClient(fd, list);
     }
     else
-    { // We got some good data from a client
+    {
+        // We got some good data from a client
         printf("pollserver: recv from fd %d: %.*s\n", fd, nbytes, buf);
 
         const auto iter = _clientContexts.find(fd);
