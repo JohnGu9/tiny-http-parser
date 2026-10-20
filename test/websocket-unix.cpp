@@ -18,7 +18,7 @@
 #include "websocket-accept.h"
 
 // cpp does't support marco __STDC_VERSION__, we need to define it by ourself
-// In this project c standard is set to c99, the `thp` library has the symbols we need
+// In this project c standard is set to c99, the `thp` library has the websocket api symbols we need
 #define __STDC_VERSION__ 199901L
 #include "tiny-http-parser.h"
 
@@ -110,8 +110,7 @@ static void _onWsControl(TinyHttpParserWebsocketContext_t *context, uint8_t opco
         if (size != 0)
         {
             // echo the close status code
-            assert(size < 126);
-            const uint8_t closeMessage[] = {0x88, (uint8_t)size};
+            const uint8_t closeMessage[] = {0x88, (uint8_t)size}; // control frame size always small than 126, safe to convert to uint8_t
             send(clientContext->fd, closeMessage, sizeof(closeMessage), 0);
             // this app acts as a server and no need to mask data
             send(clientContext->fd, data, size, 0);
@@ -288,7 +287,7 @@ static void _closeClient(int fd, FdList *list)
 
 static void _onClientEvent(int fd, short revent, FdList *list)
 {
-    char buf[512]; // Buffer for client data
+    char buf[sizeof(size_t) * 256]; // Buffer for client data
     int nbytes = recv(fd, buf, sizeof buf, 0);
     if (nbytes <= 0)
     {
@@ -356,19 +355,17 @@ static void _onServerEvent(int fd, short revent, FdList *list)
 
     socklen_t addrlen = sizeof remoteaddr;
     int newfd = accept(fd, (struct sockaddr *)&remoteaddr, &addrlen);
-
     if (newfd == -1)
     {
         perror("accept");
+        return;
     }
-    else
-    {
-        _openClient(newfd, list);
-        char remoteIP[INET6_ADDRSTRLEN];
-        printf("pollserver: new connection from %s on socket %d\n",
-               inet_ntop2(&remoteaddr, remoteIP, sizeof remoteIP),
-               newfd);
-    }
+
+    char remoteIP[INET6_ADDRSTRLEN];
+    printf("pollserver: new connection from %s on socket %d\n",
+           inet_ntop2(&remoteaddr, remoteIP, sizeof remoteIP),
+           newfd);
+    _openClient(newfd, list);
 }
 
 /*

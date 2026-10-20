@@ -72,8 +72,8 @@ extern "C"
   struct _TinyHttpParserHeader
   {
     TinyHttpParserStringView_t raw;
-    TinyHttpParserRequestHeader_t *request_header;
-    TinyHttpParserResponseHeader_t *response_header;
+    const TinyHttpParserRequestHeader_t *request_header;
+    const TinyHttpParserResponseHeader_t *response_header;
   };
 
   typedef struct _TinyHttpParserContext TinyHttpParserContext_t;
@@ -219,6 +219,7 @@ extern "C"
     void *user_context;
     const char *error_reason;
     int parser_status;
+
     char *buffer;
     size_t buffer_size;
     size_t expected_chunk_size;

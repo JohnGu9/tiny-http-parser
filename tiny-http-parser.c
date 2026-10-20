@@ -14,6 +14,10 @@
 #define MAX(a, b) (a) > (b) ? (a) : (b)
 #endif
 
+#ifndef MIN
+#define MIN(a, b) (a) < (b) ? (a) : (b)
+#endif
+
 #define _find_sub_string find_sub_string
 
 #define _invoke_on_error(context, reason)                    \
@@ -118,7 +122,7 @@ static size_t _char_to_number(char c)
 #define HEX_BASE 16
 #define OCTAL_BASE 10
 
-static size_t _uint_pow(size_t base, size_t exp)
+static size_t _pow_unsigned(size_t base, size_t exp)
 {
   size_t result = 1;
   while (exp)
@@ -135,14 +139,14 @@ static size_t _uint_pow(size_t base, size_t exp)
  * @brief simple version of strtol()
  *        strtol() available in <stdlib.h> after C99
  */
-static size_t _string_to_unsigned_number(const char *str, const char *str_end, const int base)
+static size_t _string_to_unsigned(const char *str, const char *str_end, const int base)
 {
   size_t result = 0;
   for (; str < str_end; str++)
   {
     size_t position = str_end - str - 1;
     size_t n = _char_to_number(*str);
-    result += n * _uint_pow(base, position);
+    result += n * _pow_unsigned(base, position);
   }
   return result;
 }
@@ -529,13 +533,15 @@ void tiny_http_parser_deinit(TinyHttpParserContext_t *context)
   }
 }
 
+#define _is_string_view_equal_to(string_view, literal) (tiny_http_parser_string_view_compare(string_view, FMT_LITERAL(literal)) == 0)
+
 static int _is_no_content_status_code(const TinyHttpParserStringView_t *status_code)
 {
-  if (tiny_http_parser_string_view_compare(status_code, FMT_LITERAL("204")) == 0) // 204 No Content
+  if (_is_string_view_equal_to(status_code, "204")) // 204 No Content
   {
     return 1;
   }
-  if (tiny_http_parser_string_view_compare(status_code, FMT_LITERAL("304")) == 0) // 304 Not Modified
+  if (_is_string_view_equal_to(status_code, "304")) // 304 Not Modified
   {
     return 1;
   }
@@ -553,7 +559,7 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
   UNUSED(context);
 
   const TinyHttpParserPair_t *headers_list = NULL;
-  TinyHttpParserStringView_t *status_code;
+  const TinyHttpParserStringView_t *status_code;
   size_t headers_list_size = 0;
   if (header->response_header != NULL)
   {
@@ -579,14 +585,16 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
   {
     const TinyHttpParserPair_t *el = &headers_list[i];
 
-    if (tiny_http_parser_string_view_compare(&(el->key), FMT_LITERAL("Transfer-Encoding")) == 0 &&
-        tiny_http_parser_string_view_compare(&(el->value), FMT_LITERAL("chunked")) == 0)
+    if (_is_string_view_equal_to(&el->key, "Transfer-Encoding"))
     {
-      memset(&chunked_length, 0xFF, sizeof(chunked_length)); // max value of size_t
+      if (_is_string_view_equal_to(&el->value, "chunked"))
+      {
+        memset(&chunked_length, 0xFF, sizeof(chunked_length)); // max value of size_t
+      }
     }
-    if (tiny_http_parser_string_view_compare(&(el->key), FMT_LITERAL("Content-Length")) == 0)
+    else if (_is_string_view_equal_to(&el->key, "Content-Length"))
     {
-      content_length = _string_to_unsigned_number(el->value.data, el->value.data + el->value.size, OCTAL_BASE);
+      content_length = _string_to_unsigned(el->value.data, el->value.data + el->value.size, OCTAL_BASE);
     }
     else if (_find_sub_string(el->key.data, el->key.size, FMT_LITERAL("Content-")) != NULL)
     {
@@ -1048,7 +1056,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         data = data_end;
         break;
       }
-      context->expected_chunk_size = _string_to_unsigned_number(data, line_end, HEX_BASE);
+      context->expected_chunk_size = _string_to_unsigned(data, line_end, HEX_BASE);
       context->on_chunk_size(context, context->expected_chunk_size);
       context->parser_status = _parser_status_chunk_body;
       data = line_end + GET_LITERAL_SIZE(_line_end_symbol);
@@ -1074,7 +1082,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         data = data_end;
         break;
       }
-      context->expected_chunk_size = _string_to_unsigned_number(context->buffer, line_end, HEX_BASE);
+      context->expected_chunk_size = _string_to_unsigned(context->buffer, line_end, HEX_BASE);
       context->on_chunk_size(context, context->expected_chunk_size);
       const size_t consume_size = line_end - context->buffer + GET_LITERAL_SIZE(_line_end_symbol);
       context->free_buffer(context, context->buffer, context->buffer_size);
@@ -1184,8 +1192,7 @@ void tiny_http_parser_chunk_deinit(TinyHttpParserChunkContext_t *context)
   }
 }
 
-#ifdef __STDC_VERSION__
-#if __STDC_VERSION__ >= 199901L // C99
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L // C99
 
 #include <assert.h>
 
@@ -1242,16 +1249,54 @@ void tiny_http_parser_websocket_init(TinyHttpParserWebsocketContext_t *context,
   context->header_size = 0;
 }
 
-#ifndef MIN
-#define MIN(a, b) (a) < (b) ? (a) : (b)
-#endif
-
 #define _websocket_fin(c) (c & 0b10000000)
 #define _websocket_opcode(c) (c & 0b00001111)
 #define _websocket_mask_flag(c) (c & 0b10000000)
 #define _websocket_payload_length(c) (c & 0b01111111)
 
-static int _is_big_endian()
+static uint16_t _swap_endian_16(uint16_t val)
+{
+  return (val << 8) | (val >> 8);
+}
+
+static uint64_t _swap_endian_64(uint64_t val)
+{
+  val = ((val << 8) & 0xFF00FF00FF00FF00ULL) |
+        ((val >> 8) & 0x00FF00FF00FF00FFULL);
+  val = ((val << 16) & 0xFFFF0000FFFF0000ULL) |
+        ((val >> 16) & 0x0000FFFF0000FFFFULL);
+  return (val << 32) | (val >> 32);
+}
+
+#define __BYTE_ORDER__ 0
+
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+
+static uint16_t _ntohs(uint16_t val)
+{
+  return _swap_endian_16(val);
+}
+
+static uint64_t _ntohll(uint64_t val)
+{
+  return _swap_endian_64(val);
+}
+
+#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+
+static uint16_t _ntohs(uint16_t val)
+{
+  return val;
+}
+
+static uint64_t _ntohll(uint64_t val)
+{
+  return val;
+}
+
+#else
+
+static int _is_big_endian_raw()
 {
   const uint32_t x = 1;
   const uint8_t *byte_ptr = (const uint8_t *)&x;
@@ -1266,18 +1311,14 @@ static int _is_big_endian()
   }
 }
 
-static uint16_t _swap_endian_16(uint16_t val)
+static int _is_big_endian()
 {
-  return (val << 8) | (val >> 8);
-}
-
-static uint64_t _swap_endian_64(uint64_t val)
-{
-  val = ((val << 8) & 0xFF00FF00FF00FF00ULL) |
-        ((val >> 8) & 0x00FF00FF00FF00FFULL);
-  val = ((val << 16) & 0xFFFF0000FFFF0000ULL) |
-        ((val >> 16) & 0x0000FFFF0000FFFFULL);
-  return (val << 32) | (val >> 32);
+  static int result = -1;
+  if (result == -1) // cache result
+  {
+    result = _is_big_endian_raw();
+  }
+  return result;
 }
 
 static uint16_t _ntohs(uint16_t val)
@@ -1297,6 +1338,8 @@ static uint64_t _ntohll(uint64_t val)
   }
   return _swap_endian_64(val);
 }
+
+#endif
 
 #define WEBSOCKET_MASK_KEY_SIZE 4
 
@@ -1346,12 +1389,13 @@ static int _tiny_http_parser_websocket_parser_header(TinyHttpParserWebsocketCont
   }
 
   uint64_t extend_payload_length;
+#define WEBSOCKET_EXTEND_PAYLOAD_LENGTH_OFFSET 2
   switch (payload_length)
   {
   case 126:
   {
     uint16_t length;
-    memcpy(&length, context->header, sizeof(length));
+    memcpy(&length, context->header + WEBSOCKET_EXTEND_PAYLOAD_LENGTH_OFFSET, sizeof(length));
     extend_payload_length = _ntohs(length);
     if (extend_payload_length < 126)
     {
@@ -1363,9 +1407,9 @@ static int _tiny_http_parser_websocket_parser_header(TinyHttpParserWebsocketCont
   case 127:
   {
     uint64_t length;
-    memcpy(&length, context->header, sizeof(length));
+    memcpy(&length, context->header + WEBSOCKET_EXTEND_PAYLOAD_LENGTH_OFFSET, sizeof(length));
     extend_payload_length = _ntohll(length);
-    if (extend_payload_length < _uint_pow(2, 16))
+    if (extend_payload_length < _pow_unsigned(2, 16))
     {
       _invoke_on_error(context, "The minimum number of bits must be used");
       return -1;
@@ -1391,8 +1435,10 @@ static int _tiny_http_parser_websocket_parser_header(TinyHttpParserWebsocketCont
     _invoke_on_error(context, "Data frame is too big");
     return -1;
   }
+
   context->header_size = expected_header_size;
   context->current_payload_length = extend_payload_length;
+  context->recv_payload_length = 0;
   context->buffer_size += extend_payload_length;
   return 0;
 }
@@ -1445,7 +1491,6 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
         break;
       }
       context->buffer = (char *)new_buffer;
-      context->recv_payload_length = 0;
       context->parser_status = _parser_status_websocket_data_frame_payload;
       consume_data_size = context->header_size - old_header_size;
       data = data + consume_data_size;
@@ -1522,5 +1567,4 @@ void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context
   }
 }
 
-#endif
 #endif

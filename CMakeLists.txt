@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_LIST_DIR)
-    project(tiny-http-parser)
+    project(tiny-http-parser LANGUAGES C CXX)
     set(CMAKE_C_STANDARD 99)
     set(CMAKE_CXX_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
