@@ -1268,8 +1268,6 @@ static uint64_t _swap_endian_64(uint64_t val)
   return (val << 32) | (val >> 32);
 }
 
-#define __BYTE_ORDER__ 0
-
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 
 static uint16_t _ntohs(uint16_t val)
