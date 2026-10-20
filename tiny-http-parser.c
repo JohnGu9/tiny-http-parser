@@ -1,6 +1,7 @@
 #include "tiny-http-parser.h"
 #include "kmp.h"
 
+#include <assert.h>
 #include <math.h>
 
 #define GET_LITERAL_SIZE(literal) (sizeof(literal) - 1)
@@ -118,6 +119,19 @@ static size_t _char_to_number(char c)
 #define HEX_BASE 16
 #define OCTAL_BASE 10
 
+static size_t _uint_pow(size_t base, size_t exp)
+{
+  size_t result = 1;
+  while (exp)
+  {
+    if (exp % 2)
+      result *= base;
+    exp /= 2;
+    base *= base;
+  }
+  return result;
+}
+
 /**
  * @brief simple version of strtol()
  *        strtol() available in <stdlib.h> after C99
@@ -129,7 +143,7 @@ static size_t _string_to_unsigned_number(const char *str, const char *str_end, c
   {
     size_t position = str_end - str - 1;
     size_t n = _char_to_number(*str);
-    result += n * pow(base, position);
+    result += n * _uint_pow(base, position);
   }
   return result;
 }
@@ -318,7 +332,7 @@ static size_t _parser_response_headers(TinyHttpParserContext_t *context,
   const char *data_end = data + size;
   response.headers_list_size = _get_headers_list_size(line_start, data_end);
   TinyHttpParserPair_t *headers_list = context->realloc_buffer(context, NULL, sizeof(TinyHttpParserPair_t) * response.headers_list_size);
-  if (headers_list != NULL)
+  if (response.headers_list_size == 0 || headers_list != NULL)
   {
     _parser_optional_headers(headers_list, response.headers_list_size, line_start, data_end);
     response.headers_list = headers_list;
@@ -353,7 +367,7 @@ static size_t _parser_request_headers(TinyHttpParserContext_t *context,
   const char *data_end = data + size;
   request.headers_list_size = _get_headers_list_size(line_start, data_end);
   TinyHttpParserPair_t *headers_list = context->realloc_buffer(context, NULL, sizeof(TinyHttpParserPair_t) * request.headers_list_size);
-  if (headers_list != NULL)
+  if (request.headers_list_size == 0 || headers_list != NULL)
   {
     _parser_optional_headers(headers_list, request.headers_list_size, line_start, data_end);
     request.headers_list = headers_list;
@@ -375,9 +389,8 @@ static size_t _parser_headers(TinyHttpParserContext_t *context, const char *data
       .data = data,
       .size = (TINY_HTTP_PARSER_SIZE_T)size,
   };
-  if (size < 4)
+  if (size < 4) // unlikely, \r\n\r\n already 4 bytes
   {
-    // @TODO: error handle
     return 0;
   }
   if (memcmp(data, "HTTP", 4) == 0)
@@ -635,7 +648,7 @@ void tiny_http_parser_body_init(TinyHttpParserBodyContext_t *context,
 
 size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const char *data /* input http body data */, size_t size, size_t *remain_not_recv_size /* nullable */)
 {
-  if (data == NULL)
+  if (data == NULL) // force to complete the body message
   {
     context->on_completed(context, context->buffer, context->buffer_size);
     if (remain_not_recv_size != NULL)
@@ -655,7 +668,7 @@ size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const c
   const size_t old_size = context->buffer_size;
   const size_t new_size = context->buffer_size + size;
   void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
-  if (new_buffer == NULL)
+  if (new_size != 0 && new_buffer == NULL)
   {
     _invoke_on_error(context, "http body parser alloc buffer failed");
     return 0;
@@ -755,7 +768,7 @@ static void _thp_multi_part_parser_part(TinyHttpParserMultiPartContext_t *contex
   {
     headers_list_size = _get_headers_list_size(part_header_start, part_header_end);
     headers_list = context->realloc_buffer(context, headers_list, sizeof(TinyHttpParserPair_t) * headers_list_size);
-    if (headers_list != NULL)
+    if (headers_list_size == 0 || headers_list != NULL)
     {
       _parser_optional_headers(headers_list, headers_list_size, part_header_start, part_header_end);
     }
@@ -832,8 +845,11 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
                                          size_t full_size,
                                          size_t *remain_not_recv_size)
 {
-  const char *data_start = data;
-  const char *data_end = data + full_size;
+
+  assert(context->parser_status != _parser_multi_part_completed);
+
+  const char *const data_start = data;
+  const char *const data_end = data + full_size;
   for (; data != NULL && data < data_end;)
   {
     const size_t size = data_end - data;
@@ -841,8 +857,8 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
     {
     case _parser_multi_part:
     {
-      const char *next_data = _tiny_http_parser_multi_part_input(context, data, data_end);
-      if (next_data == data) // not completed message
+      const char *const next_part_start = _tiny_http_parser_multi_part_input(context, data, data_end);
+      if (next_part_start == data) // not completed message
       {
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
         if (new_buffer == NULL)
@@ -860,7 +876,7 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
       }
       else
       {
-        data = next_data;
+        data = next_part_start; // NULL or true next_part_start
       }
       break;
     }
@@ -1004,6 +1020,9 @@ static const char *_skip_to_chunk_end(const char *data, size_t size, size_t expe
 
 size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const char *data, size_t full_size, size_t *remain_not_recv_size /* nullable */)
 {
+
+  assert(context->parser_status != _parser_status_chunk_completed);
+
   const char *const data_start = data;
   const char *const data_end = data + full_size;
   for (; data != NULL && data < data_end;)
@@ -1165,3 +1184,344 @@ void tiny_http_parser_chunk_deinit(TinyHttpParserChunkContext_t *context)
     context->buffer = NULL;
   }
 }
+
+#ifdef __STDC_VERSION__
+#if __STDC_VERSION__ >= 199901L // C99
+
+#include <assert.h>
+
+static void _ignore_tiny_http_parser_websocket_on_control(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size)
+{
+  UNUSED(context);
+  UNUSED(opcode);
+  UNUSED(data);
+  UNUSED(size);
+}
+static void _ignore_tiny_http_parser_websocket_on_message(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size)
+{
+  UNUSED(context);
+  UNUSED(opcode);
+  UNUSED(data);
+  UNUSED(size);
+}
+
+static void _ignore_tiny_http_parser_websocket_on_error(TinyHttpParserWebsocketContext_t *context, const char *reason)
+{
+  UNUSED(context);
+  UNUSED(reason);
+}
+
+enum
+{
+  _parser_status_websocket_data_frame_header,
+  _parser_status_websocket_data_frame_payload,
+  _parser_status_websocket_data_frame_closed,
+};
+
+DEFAULT_REALLOC(_default_tiny_http_parser_websocket_realloc_buffer, TinyHttpParserWebsocketContext_t);
+DEFAULT_FREE(_default_tiny_http_parser_websocket_free_buffer, TinyHttpParserWebsocketContext_t);
+
+void tiny_http_parser_websocket_init(TinyHttpParserWebsocketContext_t *context,
+                                     void *user_context,
+                                     tiny_http_parser_websocket_on_control_fn on_control,
+                                     tiny_http_parser_websocket_on_message_fn on_message,
+                                     tiny_http_parser_websocket_on_error_fn on_error,
+                                     tiny_http_parser_websocket_realloc_buffer_fn realloc_buffer,
+                                     tiny_http_parser_websocket_free_buffer_fn free_buffer)
+{
+  context->user_context = user_context;
+  context->on_control = on_control != NULL ? on_control : _ignore_tiny_http_parser_websocket_on_control;
+  context->on_message = on_message != NULL ? on_message : _ignore_tiny_http_parser_websocket_on_message;
+  context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_websocket_on_error;
+  context->realloc_buffer = realloc_buffer != NULL ? realloc_buffer : _default_tiny_http_parser_websocket_realloc_buffer;
+  context->free_buffer = free_buffer != NULL ? free_buffer : _default_tiny_http_parser_websocket_free_buffer;
+
+  context->error_reason = NULL;
+  context->parser_status = _parser_status_websocket_data_frame_header;
+  context->buffer = NULL;
+  context->buffer_size = 0;
+  context->header_size = 0;
+}
+
+#ifndef MIN
+#define MIN(a, b) (a) < (b) ? (a) : (b)
+#endif
+
+#define _websocket_fin(c) (c & 0b10000000)
+#define _websocket_opcode(c) (c & 0b00001111)
+#define _websocket_mask_flag(c) (c & 0b10000000)
+#define _websocket_payload_length(c) (c & 0b01111111)
+
+static int _is_big_endian()
+{
+  const uint32_t x = 1;
+  const uint8_t *byte_ptr = (const uint8_t *)&x;
+
+  if (*byte_ptr == 0)
+  {
+    return 1; // True: Big Endian
+  }
+  else
+  {
+    return 0; // False: Little Endian
+  }
+}
+
+static uint16_t _swap_endian_16(uint16_t val)
+{
+  return (val << 8) | (val >> 8);
+}
+
+static uint64_t _swap_endian_64(uint64_t val)
+{
+  val = ((val << 8) & 0xFF00FF00FF00FF00ULL) |
+        ((val >> 8) & 0x00FF00FF00FF00FFULL);
+  val = ((val << 16) & 0xFFFF0000FFFF0000ULL) |
+        ((val >> 16) & 0x0000FFFF0000FFFFULL);
+  return (val << 32) | (val >> 32);
+}
+
+static uint16_t _ntohs(uint16_t val)
+{
+  if (_is_big_endian())
+  {
+    return val;
+  }
+  return _swap_endian_16(val);
+}
+
+static uint64_t _ntohll(uint64_t val)
+{
+  if (_is_big_endian())
+  {
+    return val;
+  }
+  return _swap_endian_64(val);
+}
+
+#define WEBSOCKET_MASK_KEY_SIZE 4
+
+static int _tiny_http_parser_websocket_parser_header(TinyHttpParserWebsocketContext_t *context)
+{
+  size_t expected_header_size = 2;
+  if (context->header_size < expected_header_size)
+  {
+    return 1; // data frame header not completed
+  }
+  uint8_t fin = _websocket_fin(context->header[0]);
+  uint8_t opcode = _websocket_opcode(context->header[0]);
+  uint8_t mask_flag = _websocket_mask_flag(context->header[1]);
+  uint8_t payload_length = _websocket_payload_length(context->header[1]);
+
+  if (opcode >= 8 && fin == 0)
+  {
+    _invoke_on_error(context, "Control frames should be unfragmetable");
+    return -1;
+  }
+
+  switch (payload_length)
+  {
+  case 126:
+    expected_header_size += 2;
+    break;
+  case 127:
+    expected_header_size += 8;
+    break;
+  default:
+    break;
+  }
+
+  if (mask_flag != 0)
+  {
+    context->current_mask_key = context->header + expected_header_size;
+    expected_header_size += WEBSOCKET_MASK_KEY_SIZE;
+  }
+  else
+  {
+    context->current_mask_key = NULL;
+  }
+
+  if (context->header_size < expected_header_size)
+  {
+    return 1; // data frame header not completed
+  }
+
+  uint64_t extend_payload_length;
+  switch (payload_length)
+  {
+  case 126:
+  {
+    uint16_t length;
+    memcpy(&length, context->header, sizeof(length));
+    extend_payload_length = _ntohs(length);
+    if (extend_payload_length < 126)
+    {
+      _invoke_on_error(context, "The minimum number of bits must be used");
+      return -1;
+    }
+    break;
+  }
+  case 127:
+  {
+    uint64_t length;
+    memcpy(&length, context->header, sizeof(length));
+    extend_payload_length = _ntohll(length);
+    if (extend_payload_length < _uint_pow(2, 16))
+    {
+      _invoke_on_error(context, "The minimum number of bits must be used");
+      return -1;
+    }
+    if (extend_payload_length >> 63)
+    {
+      _invoke_on_error(context, "The most significant bit must be zero");
+      return -1;
+    }
+    break;
+  }
+  default:
+    extend_payload_length = payload_length;
+    break;
+  }
+  if (opcode >= 8 && extend_payload_length > 125)
+  {
+    _invoke_on_error(context, "Control frames must have up to 125 bytes");
+    return -1;
+  }
+  if (extend_payload_length > SIZE_MAX)
+  {
+    _invoke_on_error(context, "Data frame is too big");
+    return -1;
+  }
+  context->header_size = expected_header_size;
+  context->current_payload_length = extend_payload_length;
+  context->buffer_size += extend_payload_length;
+  return 0;
+}
+
+static void _tiny_http_parser_websocket_mask_payload(char *data, size_t size, const uint8_t *mask_key, size_t mask_key_size)
+{
+  if (mask_key == NULL)
+  {
+    return;
+  }
+  for (size_t i = 0; i < size; i++)
+  {
+    data[i] ^= mask_key[i % mask_key_size];
+  }
+}
+
+size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *context, const char *data, size_t full_size, size_t *remain_not_recv_size)
+{
+  assert(context->parser_status != _parser_status_websocket_data_frame_closed);
+  const char *const data_end = data + full_size;
+  for (; data != NULL && data < data_end;)
+  {
+    size_t size = data_end - data;
+    switch (context->parser_status)
+    {
+    case _parser_status_websocket_data_frame_header:
+    {
+      size_t consume_data_size = sizeof(context->header) - context->header_size;
+      consume_data_size = MIN(consume_data_size, size);
+      memcpy(context->header + context->header_size, data, consume_data_size);
+      const size_t old_header_size = context->header_size;
+      context->header_size = old_header_size + consume_data_size;
+      const int status = _tiny_http_parser_websocket_parser_header(context);
+      if (status < 0) // error
+      {
+        data = NULL;
+        break;
+      }
+      if (status > 0) // header not completed
+      {
+        data = data + consume_data_size;
+        break;
+      }
+      // status == 0
+      void *new_buffer = context->realloc_buffer(context, context->buffer, context->buffer_size);
+      if (context->buffer_size != 0 && new_buffer == NULL)
+      {
+        _invoke_on_error(context, "http websocket parser alloc buffer failed");
+        data = NULL;
+        break;
+      }
+      context->buffer = (char *)new_buffer;
+      context->recv_payload_length = 0;
+      context->parser_status = _parser_status_websocket_data_frame_payload;
+      consume_data_size = context->header_size - old_header_size;
+      data = data + consume_data_size;
+      break;
+    }
+    default:
+      break;
+    }
+    // the payload length maybe 0
+    // put the branch(_parser_status_websocket_data_frame_payload) end of the loop step
+    // to ensure the callbacks would be called in time
+    if (context->parser_status == _parser_status_websocket_data_frame_payload)
+    {
+      size = data_end - data;
+
+      size_t expected_recv_length = context->current_payload_length - context->recv_payload_length;
+      char *const payload_start = context->buffer + context->buffer_size - context->current_payload_length;
+      if (size < expected_recv_length)
+      {
+        memcpy(payload_start + context->recv_payload_length, data, size);
+        context->recv_payload_length += size;
+        data = data + size;
+      }
+      else
+      {
+        memcpy(payload_start + context->recv_payload_length, data, expected_recv_length);
+        _tiny_http_parser_websocket_mask_payload(payload_start, context->current_payload_length, context->current_mask_key, WEBSOCKET_MASK_KEY_SIZE);
+        if (_websocket_fin(context->header[0]) != 0)
+        {
+          uint8_t opcode = _websocket_opcode(context->header[0]);
+          if (opcode < 8)
+          {
+            context->on_message(context, opcode, context->buffer, context->buffer_size);
+          }
+          else
+          {
+            context->on_control(context, opcode, context->buffer, context->buffer_size);
+          }
+          context->free_buffer(context, context->buffer, context->buffer_size);
+          context->buffer = NULL;
+          context->buffer_size = 0;
+          if (opcode == 8) // close
+          {
+            context->parser_status = _parser_status_websocket_data_frame_closed;
+            if (remain_not_recv_size)
+            {
+              *remain_not_recv_size = 0;
+            }
+            data = data + expected_recv_length;
+            const size_t consume_data_size = data_end - data;
+            return consume_data_size;
+          }
+        }
+        context->header_size = 0;
+        context->parser_status = _parser_status_websocket_data_frame_header;
+        data = data + expected_recv_length;
+      }
+    }
+  }
+  if (remain_not_recv_size)
+  {
+    memset(remain_not_recv_size, 0xFF, sizeof(*remain_not_recv_size));
+  }
+  return full_size;
+}
+
+void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context)
+{
+  if (context->buffer != NULL)
+  {
+    context->free_buffer(context, context->buffer, context->buffer_size);
+    context->buffer = NULL;
+    context->buffer_size = 0;
+  }
+}
+
+#endif
+#endif

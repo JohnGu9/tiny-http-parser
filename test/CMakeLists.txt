@@ -15,3 +15,9 @@ target_link_libraries(body_test PRIVATE thp common)
 
 add_executable(how_to_handle_error ${CMAKE_CURRENT_LIST_DIR}/how-to-handle-error.c)
 target_link_libraries(how_to_handle_error PRIVATE thp common)
+
+if(UNIX)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/websocket-accept)
+    add_executable(websocket_unix ${CMAKE_CURRENT_LIST_DIR}/websocket-unix.cpp)
+    target_link_libraries(websocket_unix PRIVATE thp common websocket_accept)
+endif()

@@ -1,3 +1,6 @@
 [submodule "kmp"]
 	path = kmp
 	url = https://github.com/JohnGu9/kmp.git
+[submodule "test/websocket-accept"]
+	path = test/websocket-accept
+	url = https://github.com/JohnGu9/websocket-accept.git
