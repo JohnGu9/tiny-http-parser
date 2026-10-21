@@ -291,85 +291,85 @@ extern "C"
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ < 199901L
 
-  typedef unsigned char uint8_t;
+  // nothing
 
 #else
 
+// websocket (only available when c standard bigger than c99 `__STDC_VERSION__ >= 199901L`)
+// reference: https://en.wikipedia.org/wiki/WebSocket
+//            https://www.rfc-editor.org/info/rfc6455/#section-5.2
+
 #include <stdint.h>
 
+typedef struct _TinyHttpParserWebsocketContext TinyHttpParserWebsocketContext_t;
+
+/**
+ * @brief
+ *
+ * @param opcode - [8]  close;
+ *                 [9]  ping;
+ *                 [10] pong;
+ *
+ */
+typedef void (*tiny_http_parser_websocket_on_control_fn)(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size);
+/**
+ * @brief
+ *
+ * @param opcode - [1]  utf-8;
+ *                 [2]  binray;
+ *
+ */
+typedef void (*tiny_http_parser_websocket_on_message_fn)(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size);
+typedef void (*tiny_http_parser_websocket_on_error_fn)(TinyHttpParserWebsocketContext_t *context, const char *reason);
+typedef void *(*tiny_http_parser_websocket_realloc_buffer_fn)(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t new_size);
+typedef void (*tiny_http_parser_websocket_free_buffer_fn)(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t buffer_size);
+
+struct _TinyHttpParserWebsocketContext
+{
+  void *user_context;
+  const char *error_reason;
+  int parser_status;
+
+  uint8_t header[2 /* Fixed */ + 8 /* Extended payload length */ + 4 /* Masking-key */];
+  size_t header_size;
+  const uint8_t *current_mask_key;
+
+  char *buffer;
+  size_t buffer_size;
+  size_t current_payload_length;
+  size_t recv_payload_length;
+
+  tiny_http_parser_websocket_on_control_fn on_control;
+  tiny_http_parser_websocket_on_message_fn on_message;
+  tiny_http_parser_websocket_on_error_fn on_error;
+  tiny_http_parser_websocket_realloc_buffer_fn realloc_buffer;
+  tiny_http_parser_websocket_free_buffer_fn free_buffer;
+};
+
+/**
+ * @brief init the `TinyHttpParserWebsocketContext_t`
+ *
+ * @param context `TinyHttpParserWebsocketContext_t`
+ * @param user_context nullable
+ * @param on_control nullable `void (TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size)`
+ * @param on_message nullable `void (TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size)`
+ * @param on_error nullable `void *(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t new_size)`
+ * @param realloc_buffer nullable if tiny_http_parser_hook_init is called
+ * @param free_buffer nullable if tiny_http_parser_hook_init is called
+ */
+void tiny_http_parser_websocket_init(TinyHttpParserWebsocketContext_t *context,
+                                     void *user_context,
+                                     tiny_http_parser_websocket_on_control_fn on_control,
+                                     tiny_http_parser_websocket_on_message_fn on_message,
+                                     tiny_http_parser_websocket_on_error_fn on_error,
+                                     tiny_http_parser_websocket_realloc_buffer_fn realloc_buffer,
+                                     tiny_http_parser_websocket_free_buffer_fn free_buffer);
+size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *context, const char *data /* input http "BODY" data */, size_t size, size_t *remain_not_recv_size /* nullable */);
+void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context);
+
+const uint8_t *tiny_http_parser_websocket_get_mask(TinyHttpParserWebsocketContext_t *context);
+
 #endif
-
-  // websocket (only available when c standard bigger than c99 `__STDC_VERSION__ >= 199901L`)
-  // reference: https://en.wikipedia.org/wiki/WebSocket
-  //            https://www.rfc-editor.org/info/rfc6455/#section-5.2
-
-  typedef struct _TinyHttpParserWebsocketContext TinyHttpParserWebsocketContext_t;
-
-  /**
-   * @brief
-   *
-   * @param opcode - [8]  close;
-   *                 [9]  ping;
-   *                 [10] pong;
-   *
-   */
-  typedef void (*tiny_http_parser_websocket_on_control_fn)(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size);
-  /**
-   * @brief
-   *
-   * @param opcode - [1]  utf-8;
-   *                 [2]  binray;
-   *
-   */
-  typedef void (*tiny_http_parser_websocket_on_message_fn)(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size);
-  typedef void (*tiny_http_parser_websocket_on_error_fn)(TinyHttpParserWebsocketContext_t *context, const char *reason);
-  typedef void *(*tiny_http_parser_websocket_realloc_buffer_fn)(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t new_size);
-  typedef void (*tiny_http_parser_websocket_free_buffer_fn)(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t buffer_size);
-
-  struct _TinyHttpParserWebsocketContext
-  {
-    void *user_context;
-    const char *error_reason;
-    int parser_status;
-
-    uint8_t header[2 /* Fixed */ + 8 /* Extended payload length */ + 4 /* Masking-key */];
-    size_t header_size;
-    const uint8_t *current_mask_key;
-
-    char *buffer;
-    size_t buffer_size;
-    size_t current_payload_length;
-    size_t recv_payload_length;
-
-    tiny_http_parser_websocket_on_control_fn on_control;
-    tiny_http_parser_websocket_on_message_fn on_message;
-    tiny_http_parser_websocket_on_error_fn on_error;
-    tiny_http_parser_websocket_realloc_buffer_fn realloc_buffer;
-    tiny_http_parser_websocket_free_buffer_fn free_buffer;
-  };
-
-  /**
-   * @brief init the `TinyHttpParserWebsocketContext_t`
-   *
-   * @param context `TinyHttpParserWebsocketContext_t`
-   * @param user_context nullable
-   * @param on_control nullable `void (TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size)`
-   * @param on_message nullable `void (TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size)`
-   * @param on_error nullable `void *(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t new_size)`
-   * @param realloc_buffer nullable if tiny_http_parser_hook_init is called
-   * @param free_buffer nullable if tiny_http_parser_hook_init is called
-   */
-  void tiny_http_parser_websocket_init(TinyHttpParserWebsocketContext_t *context,
-                                       void *user_context,
-                                       tiny_http_parser_websocket_on_control_fn on_control,
-                                       tiny_http_parser_websocket_on_message_fn on_message,
-                                       tiny_http_parser_websocket_on_error_fn on_error,
-                                       tiny_http_parser_websocket_realloc_buffer_fn realloc_buffer,
-                                       tiny_http_parser_websocket_free_buffer_fn free_buffer);
-  size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *context, const char *data /* input http "BODY" data */, size_t size, size_t *remain_not_recv_size /* nullable */);
-  void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context);
-
-  const uint8_t *tiny_http_parser_websocket_get_mask(TinyHttpParserWebsocketContext_t *context);
 
 #ifdef __cplusplus
 }
