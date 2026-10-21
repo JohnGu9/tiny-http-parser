@@ -27,11 +27,6 @@ static void free_buffer_chunk(TinyHttpParserChunkContext_t *context, void *buffe
     free(buffer);
 }
 
-static void print_chunk_size(TinyHttpParserChunkContext_t *context, size_t size)
-{
-    printf("[chunk size](%zu)\n", size);
-}
-
 static void print_chunk(TinyHttpParserChunkContext_t *context, const char *buffer, size_t size)
 {
     printf("[chunk](%zu) %.*s\n", size, (int)size, buffer);
@@ -42,7 +37,7 @@ static void test_simple_chunk()
     printf("\ntest_simple_chunk:\n");
 
     TinyHttpParserChunkContext_t context;
-    tiny_http_parser_chunk_init(&context, NULL, print_chunk_size, print_chunk, NULL, NULL, realloc_buffer_chunk, free_buffer_chunk);
+    tiny_http_parser_chunk_init(&context, NULL, print_chunk, NULL, NULL, realloc_buffer_chunk, free_buffer_chunk);
 
     const char test_string_fragment1[] = "7\r\n"
                                          "Welcome\r\n"
@@ -77,7 +72,6 @@ static size_t on_chunk_message_header(TinyHttpParserContext_t *context, const Ti
                     printf("[OK]Verified header. \n");
                     TinyHttpParserChunkContext_t *chunk_context = tiny_http_parser_get_user_context(context, TinyHttpParserChunkContext_t *);
                     tiny_http_parser_chunk_init(chunk_context, NULL,
-                                                print_chunk_size,
                                                 print_chunk,
                                                 on_chunk_completed,
                                                 NULL,

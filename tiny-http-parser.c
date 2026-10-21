@@ -476,6 +476,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
     }
     case _parser_status_header_half_way:
     {
+      // @TODO: optimize memory usage
       size_t old_size = context->header_buffer_size;
       size_t new_size = context->header_buffer_size + size;
       void *new_buffer = context->realloc_buffer(context, context->header_buffer, new_size);
@@ -658,6 +659,9 @@ size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const c
   if (data == NULL) // force to complete the body message
   {
     context->on_completed(context, context->buffer, context->buffer_size);
+    context->free_buffer(context, context->buffer, context->buffer_size);
+    context->buffer = NULL;
+    context->buffer_size = 0;
     if (remain_not_recv_size != NULL)
     {
       *remain_not_recv_size = 0;
@@ -747,6 +751,8 @@ void tiny_http_parser_multi_part_init(TinyHttpParserMultiPartContext_t *context,
                                       tiny_http_parser_multi_part_realloc_buffer_fn realloc_buffer,
                                       tiny_http_parser_multi_part_free_buffer_fn free_buffer)
 {
+  assert(boundary != NULL);
+
   context->user_context = user_context;
   context->boundary = boundary;
 
@@ -889,6 +895,7 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
     }
     case _parser_multi_part_half_way:
     {
+      // @TODO: optimize memory usage
       const size_t old_size = context->buffer_size;
       const size_t new_size = context->buffer_size + size;
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
@@ -950,12 +957,6 @@ void tiny_http_parser_multi_part_deinit(TinyHttpParserMultiPartContext_t *contex
   }
 }
 
-static void _ignore_tiny_http_parser_chunk_on_chunk_size(TinyHttpParserChunkContext_t *context, size_t size)
-{
-  UNUSED(context);
-  UNUSED(size);
-}
-
 static void _ignore_tiny_http_parser_chunk_on_chunk(TinyHttpParserChunkContext_t *context, const char *data, size_t size)
 {
   UNUSED(context);
@@ -988,7 +989,6 @@ DEFAULT_FREE(_default_tiny_http_parser_chunk_free_buffer, TinyHttpParserChunkCon
 
 void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
                                  void *user_context,
-                                 tiny_http_parser_chunk_on_chunk_size_fn on_chunk_size,
                                  tiny_http_parser_chunk_on_chunk_fn on_chunk,
                                  tiny_http_parser_chunk_on_completed_fn on_completed,
                                  tiny_http_parser_chunk_on_error_fn on_error,
@@ -996,7 +996,6 @@ void tiny_http_parser_chunk_init(TinyHttpParserChunkContext_t *context,
                                  tiny_http_parser_chunk_free_buffer_fn free_buffer)
 {
   context->user_context = user_context;
-  context->on_chunk_size = on_chunk_size != NULL ? on_chunk_size : _ignore_tiny_http_parser_chunk_on_chunk_size;
   context->on_chunk = on_chunk != NULL ? on_chunk : _ignore_tiny_http_parser_chunk_on_chunk;
   context->on_completed = on_completed != NULL ? on_completed : _ignore_tiny_http_parser_chunk_on_completed;
   context->on_error = on_error != NULL ? on_error : _ignore_tiny_http_parser_chunk_on_error;
@@ -1057,13 +1056,13 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         break;
       }
       context->expected_chunk_size = _string_to_unsigned(data, line_end, HEX_BASE);
-      context->on_chunk_size(context, context->expected_chunk_size);
       context->parser_status = _parser_status_chunk_body;
       data = line_end + GET_LITERAL_SIZE(_line_end_symbol);
       break;
     }
     case _parser_status_chunk_header_half_way:
     {
+      // @TODO: optimize memory usage
       const size_t old_size = context->buffer_size;
       const size_t new_size = context->buffer_size + size;
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
@@ -1083,7 +1082,6 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         break;
       }
       context->expected_chunk_size = _string_to_unsigned(context->buffer, line_end, HEX_BASE);
-      context->on_chunk_size(context, context->expected_chunk_size);
       const size_t consume_size = line_end - context->buffer + GET_LITERAL_SIZE(_line_end_symbol);
       context->free_buffer(context, context->buffer, context->buffer_size);
       context->buffer = NULL;
@@ -1126,6 +1124,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
     }
     case _parser_status_chunk_body_half_way:
     {
+      // @TODO: optimize memory usage
       const size_t old_size = context->buffer_size;
       const size_t new_size = context->buffer_size + size;
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
@@ -1193,8 +1192,6 @@ void tiny_http_parser_chunk_deinit(TinyHttpParserChunkContext_t *context)
 }
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L // C99
-
-#include <assert.h>
 
 static void _ignore_tiny_http_parser_websocket_on_control(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size)
 {
@@ -1268,7 +1265,7 @@ static uint64_t _swap_endian_64(uint64_t val)
   return (val << 32) | (val >> 32);
 }
 
-#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 
 static uint16_t _ntohs(uint16_t val)
 {
@@ -1280,7 +1277,7 @@ static uint64_t _ntohll(uint64_t val)
   return _swap_endian_64(val);
 }
 
-#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 
 static uint16_t _ntohs(uint16_t val)
 {
@@ -1563,6 +1560,11 @@ void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context
     context->buffer = NULL;
     context->buffer_size = 0;
   }
+}
+
+const uint8_t *tiny_http_parser_websocket_get_mask(TinyHttpParserWebsocketContext_t *context)
+{
+  return context->current_mask_key;
 }
 
 #endif
