@@ -171,11 +171,14 @@ static const TinyHttpParserStringView_t *_find_sub_string_from_two_part(const Ti
 {
   const size_t expected_buffer_size = 2 * (pattern->size - 1);
   assert(expected_buffer_size <= buffer_size); // !important
+
   const size_t part0_copy_size = MIN(part0->size, (pattern->size - 1));
   const size_t part0_copy_start_position = part0->size - part0_copy_size;
   memcpy(buffer, part0->data + part0_copy_start_position, part0_copy_size);
+
   const size_t part1_copy_size = MIN(part1->size, (pattern->size - 1));
   memcpy(buffer + part0_copy_size, part1->data, part1_copy_size);
+
   const size_t buffer_used_size = part0_copy_size + part1_copy_size;
   const char *result = _find_sub_string(buffer, buffer_used_size, pattern->data, pattern->size);
   if (result != NULL)
@@ -248,16 +251,8 @@ void tiny_http_parser_init(TinyHttpParserContext_t *context,
   context->expected_body_size = 0;
 }
 
-static const char *_find_header_end(const char *data, size_t size)
-{
-  const char *end = _find_sub_string(data, size, FMT_LITERAL("\r\n\r\n"));
-  if (end != NULL)
-  {
-    return end + GET_LITERAL_SIZE("\r\n\r\n");
-  }
-
-  return NULL;
-}
+static const TinyHttpParserStringView_t _header_end_symbol = StaticTinyHttpParserStringView("\r\n\r\n");
+static const TinyHttpParserStringView_t _line_end_symbol = StaticTinyHttpParserStringView("\r\n");
 
 static const char *_go_to_next_not_char(char c, const char *data, const char *data_end)
 {
@@ -293,21 +288,19 @@ static void _get_chunk(const char *data, const char *data_end, TinyHttpParserStr
   };
 }
 
-static const char _line_end_symbol[] = "\r\n";
-
 static size_t _get_headers_list_size(const char *data, const char *data_end)
 {
   size_t headers_list_size = 0;
   for (const char *line_start = data; line_start < data_end;)
   {
-    const char *line_end = _find_sub_string(line_start, data_end - line_start, FMT_LITERAL(_line_end_symbol));
+    const char *line_end = _find_sub_string(line_start, data_end - line_start, _line_end_symbol.data, _line_end_symbol.size);
     if (line_start == line_end)
     {
       // empty line
       break;
     }
     headers_list_size++;
-    line_start = line_end + GET_LITERAL_SIZE(_line_end_symbol);
+    line_start = line_end + _line_end_symbol.size;
   }
   return headers_list_size;
 }
@@ -320,7 +313,7 @@ static size_t _parser_optional_headers(TinyHttpParserPair_t *headers_list,
   size_t headers_list_size = 0;
   for (const char *line_start = data; line_start < data_end;)
   {
-    const char *line_end = _find_sub_string(line_start, data_end - line_start, FMT_LITERAL(_line_end_symbol));
+    const char *line_end = _find_sub_string(line_start, data_end - line_start, _line_end_symbol.data, _line_end_symbol.size);
     if (line_start == line_end)
     {
       break;
@@ -354,7 +347,7 @@ static size_t _parser_optional_headers(TinyHttpParserPair_t *headers_list,
           },
       };
     }
-    line_start = line_end + GET_LITERAL_SIZE(_line_end_symbol);
+    line_start = line_end + _line_end_symbol.size;
   }
   return headers_list_size;
 }
@@ -368,13 +361,13 @@ static size_t _parser_response_headers(TinyHttpParserContext_t *context,
   TinyHttpParserResponseHeader_t response = {0};
   header->response_header = &response;
 
-  const char *line_end = _find_sub_string(data, size, FMT_LITERAL(_line_end_symbol));
+  const char *line_end = _find_sub_string(data, size, _line_end_symbol.data, _line_end_symbol.size);
 
   _get_chunk(data, line_end, &response.protocol);
   _get_chunk(response.protocol.data + response.protocol.size, line_end, &response.status_code);
   _get_chunk(response.status_code.data + response.status_code.size, line_end, &response.reason_phrase);
 
-  const char *line_start = line_end + GET_LITERAL_SIZE(_line_end_symbol);
+  const char *line_start = line_end + _line_end_symbol.size;
 
   const char *data_end = data + size;
   response.headers_list_size = _get_headers_list_size(line_start, data_end);
@@ -403,13 +396,13 @@ static size_t _parser_request_headers(TinyHttpParserContext_t *context,
   TinyHttpParserRequestHeader_t request = {0};
   header->request_header = &request;
 
-  const char *line_end = _find_sub_string(data, size, FMT_LITERAL(_line_end_symbol));
+  const char *line_end = _find_sub_string(data, size, _line_end_symbol.data, _line_end_symbol.size);
 
   _get_chunk(data, line_end, &request.method);
   _get_chunk(request.method.data + request.method.size, line_end, &request.path);
   _get_chunk(request.path.data + request.path.size, line_end, &request.protocol);
 
-  const char *line_start = line_end + GET_LITERAL_SIZE(_line_end_symbol);
+  const char *line_start = line_end + _line_end_symbol.size;
 
   const char *data_end = data + size;
   request.headers_list_size = _get_headers_list_size(line_start, data_end);
@@ -491,7 +484,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
     }
     case _parser_status_header:
     {
-      const char *header_end = _find_header_end(data, size);
+      const char *header_end = _find_sub_string(data, size, _header_end_symbol.data, _header_end_symbol.size);
       if (header_end == NULL)
       {
         void *new_buffer = context->realloc_buffer(context, context->header_buffer, size);
@@ -507,7 +500,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
         data = data_end;
         break;
       }
-
+      header_end = header_end + _header_end_symbol.size;
       size_t header_size = header_end - data;
       context->expected_body_size = _parser_headers(context, data, header_size);
       if (context->expected_body_size == 0)
@@ -539,7 +532,6 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       if (result == NULL)
       {
         size_t new_size = context->header_buffer_size + size;
-
         void *new_buffer = context->realloc_buffer(context, context->header_buffer, new_size);
         if (new_buffer == NULL)
         {
@@ -547,10 +539,10 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
           return; // critical error, can't continue
         }
         context->header_buffer = (char *)new_buffer;
-        memcpy((context->header_buffer + context->header_buffer_size), data, size);
+        memcpy(context->header_buffer + context->header_buffer_size, data, size);
         context->header_buffer_size = new_size;
 
-        data = data_end;
+        data = data + size;
         break;
       }
 
@@ -570,7 +562,6 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
         return; // critical error, can't continue
       }
 
-      size_t old_size = context->header_buffer_size;
       size_t new_size = context->header_buffer_size + copy_size;
 
       void *new_buffer = context->realloc_buffer(context, context->header_buffer, new_size);
@@ -583,8 +574,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       memcpy((context->header_buffer + context->header_buffer_size), data, copy_size);
       context->header_buffer_size = new_size;
 
-      const size_t header_size = context->header_buffer_size;
-      context->expected_body_size = _parser_headers(context, context->header_buffer, header_size);
+      context->expected_body_size = _parser_headers(context, context->header_buffer, context->header_buffer_size);
       if (context->expected_body_size == 0)
       {
         context->parser_status = _parser_status_header;
@@ -598,8 +588,7 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       context->header_buffer = NULL;
       context->header_buffer_size = 0;
 
-      size_t consume_data_size = header_size - old_size;
-      data = data + consume_data_size;
+      data = data + copy_size;
       break;
     }
 
@@ -863,11 +852,12 @@ static void _parser_single_part(TinyHttpParserMultiPartContext_t *context, const
   TinyHttpParserPair_t *headers_list = NULL;
 
   const char *part_header_start = data; // skip --${boundary}\r\n
-  const char *part_header_end = _find_header_end(data, size);
+  const char *part_header_end = _find_sub_string(data, size, _header_end_symbol.data, _header_end_symbol.size);
 
   const char *body_start;
   if (part_header_end != NULL) // has headers
   {
+    part_header_end = part_header_end + _header_end_symbol.size;
     headers_list_size = _get_headers_list_size(part_header_start, part_header_end);
     headers_list = context->realloc_buffer(context, headers_list, sizeof(TinyHttpParserPair_t) * headers_list_size);
     if (headers_list_size == 0 || headers_list != NULL)
@@ -1127,12 +1117,12 @@ static const char *_skip_to_chunk_end(const char *data, size_t size, size_t expe
     return NULL;
   }
   size_t remain_size = size - expected_size;
-  const char *line_end = _find_sub_string(data + expected_size, remain_size, FMT_LITERAL(_line_end_symbol));
+  const char *line_end = _find_sub_string(data + expected_size, remain_size, _line_end_symbol.data, _line_end_symbol.size);
   if (line_end == NULL)
   {
     return NULL;
   }
-  return line_end + GET_LITERAL_SIZE(_line_end_symbol);
+  return line_end + _line_end_symbol.size;
 }
 
 size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const char *data, size_t full_size, size_t *remain_not_recv_size /* nullable */)
@@ -1149,7 +1139,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
     {
     case _parser_status_chunk_header:
     {
-      const char *line_end = _find_sub_string(data, size, FMT_LITERAL(_line_end_symbol));
+      const char *line_end = _find_sub_string(data, size, _line_end_symbol.data, _line_end_symbol.size);
       if (line_end == NULL)
       {
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
@@ -1168,7 +1158,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
       }
       context->expected_chunk_size = _string_to_unsigned(data, line_end, HEX_BASE);
       context->parser_status = _parser_status_chunk_body;
-      data = line_end + GET_LITERAL_SIZE(_line_end_symbol);
+      data = line_end + _line_end_symbol.size;
       break;
     }
     case _parser_status_chunk_header_half_way:
@@ -1181,13 +1171,11 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
           .data = data,
           .size = size,
       };
-      const TinyHttpParserStringView_t line_end_symbol = StaticTinyHttpParserStringView("\r\n");
       char search_buffer[4];
       size_t position = 0;
-      const TinyHttpParserStringView_t *result = _find_sub_string_from_two_part(&part0, &part1, &line_end_symbol, search_buffer, sizeof(search_buffer), &position);
+      const TinyHttpParserStringView_t *result = _find_sub_string_from_two_part(&part0, &part1, &_line_end_symbol, search_buffer, sizeof(search_buffer), &position);
       if (result == NULL)
       {
-        const size_t old_size = context->buffer_size;
         const size_t new_size = context->buffer_size + size;
         void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
         if (new_buffer == NULL)
@@ -1197,7 +1185,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
           break;
         }
         context->buffer = (char *)new_buffer;
-        memcpy(context->buffer + old_size, data, size);
+        memcpy(context->buffer + context->buffer_size, data, size);
         context->buffer_size = new_size;
 
         data = data_end;
@@ -1207,11 +1195,11 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
       size_t copy_size;
       if (result == &part0)
       {
-        copy_size = position + line_end_symbol.size - part0.size;
+        copy_size = position + _line_end_symbol.size - part0.size;
       }
       else if (result == &part1)
       {
-        copy_size = position + line_end_symbol.size;
+        copy_size = position + _line_end_symbol.size;
       }
       else
       {
@@ -1221,7 +1209,6 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         break;
       }
 
-      const size_t old_size = context->buffer_size;
       const size_t new_size = context->buffer_size + copy_size;
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_buffer == NULL)
@@ -1231,17 +1218,16 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         break;
       }
       context->buffer = (char *)new_buffer;
-      memcpy(context->buffer + old_size, data, copy_size);
+      memcpy(context->buffer + context->buffer_size, data, copy_size);
       context->buffer_size = new_size;
-      const char *line_end = context->buffer + context->buffer_size - line_end_symbol.size;
+      const char *line_end = context->buffer + context->buffer_size - _line_end_symbol.size;
 
       context->expected_chunk_size = _string_to_unsigned(context->buffer, line_end, HEX_BASE);
       context->free_buffer(context, context->buffer, context->buffer_size);
       context->buffer = NULL;
       context->buffer_size = 0;
       context->parser_status = _parser_status_chunk_body;
-      const size_t consume_data_size = copy_size;
-      data = data + consume_data_size;
+      data = data + copy_size;
       break;
     }
     case _parser_status_chunk_body:
@@ -1293,7 +1279,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
       memcpy(context->buffer + old_size, data, recv_size);
       context->buffer_size = new_size;
 
-      if (expected_recv_size < recv_size)
+      if (recv_size < expected_recv_size)
       {
         data = data + recv_size;
         break;
@@ -1301,11 +1287,8 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
 
       context->on_chunk(context, context->buffer, context->expected_chunk_size);
 
-      const TinyHttpParserStringView_t chunk_end_view = {
-          .data = context->buffer + context->buffer_size - GET_LITERAL_SIZE("\r\n"),
-          .size = GET_LITERAL_SIZE("\r\n"),
-      };
-      if (!_is_string_view_equal_to(&chunk_end_view, "\r\n"))
+      if (memcmp(context->buffer + context->buffer_size - GET_LITERAL_SIZE("\r\n"),
+                 FMT_LITERAL("\r\n")) != 0)
       {
         _invoke_on_error(context, "chunk format error");
       }
@@ -1413,6 +1396,14 @@ void tiny_http_parser_websocket_init(TinyHttpParserWebsocketContext_t *context,
 #define _websocket_mask_flag(c) (c & 0b10000000)
 #define _websocket_payload_length(c) (c & 0b01111111)
 
+// gcc and clang support `__BYTE_ORDER__`
+
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+
+// nothing
+
+#else
+
 static uint16_t _swap_endian_16(uint16_t val)
 {
   return (val << 8) | (val >> 8);
@@ -1426,6 +1417,8 @@ static uint64_t _swap_endian_64(uint64_t val)
         ((val >> 16) & 0x0000FFFF0000FFFFULL);
   return (val << 32) | (val >> 32);
 }
+
+#endif
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 
@@ -1451,7 +1444,7 @@ static uint64_t _ntohll(uint64_t val)
   return val;
 }
 
-#else
+#else // fallback runtime check
 
 static int _is_big_endian_raw()
 {

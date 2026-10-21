@@ -289,12 +289,17 @@ extern "C"
   size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const char *data /* input http "BODY" data */, size_t size, size_t *remain_not_recv_size /* nullable */);
   void tiny_http_parser_chunk_deinit(TinyHttpParserChunkContext_t *context);
 
-#ifdef __STDC_VERSION__
-#if __STDC_VERSION__ >= 199901L // C99
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ < 199901L
+
+  typedef unsigned char uint8_t;
+
+#else
 
 #include <stdint.h>
 
-  // websocket
+#endif
+
+  // websocket (only available when c standard bigger than c99 `__STDC_VERSION__ >= 199901L`)
   // reference: https://en.wikipedia.org/wiki/WebSocket
   //            https://www.rfc-editor.org/info/rfc6455/#section-5.2
 
@@ -365,9 +370,6 @@ extern "C"
   void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context);
 
   const uint8_t *tiny_http_parser_websocket_get_mask(TinyHttpParserWebsocketContext_t *context);
-
-#endif
-#endif
 
 #ifdef __cplusplus
 }

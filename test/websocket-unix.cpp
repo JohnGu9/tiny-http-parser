@@ -1,5 +1,8 @@
 // reference: https://beej.us/guide/bgnet/html/split/slightly-advanced-techniques.html#poll
 
+#include "tiny-http-parser.h"
+#include "websocket-accept.h"
+
 #include <arpa/inet.h>
 #include <assert.h>
 #include <netdb.h>
@@ -14,13 +17,6 @@
 
 #include <map>
 #include <vector>
-
-#include "websocket-accept.h"
-
-// cpp does't support marco __STDC_VERSION__, we need to define it by ourself
-// In this project c standard is set to c99, the `thp` library has the websocket api symbols we need
-#define __STDC_VERSION__ 199901L
-#include "tiny-http-parser.h"
 
 #define PORT "9034" // Port we're listening on
 
