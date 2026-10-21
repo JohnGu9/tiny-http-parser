@@ -5,7 +5,7 @@ target_include_directories(common PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_SOURCE_DIR})
 
-add_executable(multi_part_test ${CMAKE_CURRENT_LIST_DIR}/multi_part.c)
+add_executable(multi_part_test ${CMAKE_CURRENT_LIST_DIR}/multi-part.c)
 target_link_libraries(multi_part_test PRIVATE thp common)
 
 add_executable(chunk_test ${CMAKE_CURRENT_LIST_DIR}/chunk.c)

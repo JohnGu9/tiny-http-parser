@@ -186,9 +186,15 @@ extern "C"
 
   // multi part
 
+#ifndef TINY_HTTP_PARSER_MULTI_PART_BOUNDARY_MAX_SIZE
+#define TINY_HTTP_PARSER_MULTI_PART_BOUNDARY_MAX_SIZE 70
+#endif
+
   typedef struct _TinyHttpParserMultiPartContext TinyHttpParserMultiPartContext_t;
 
-  typedef void (*tiny_http_parser_multi_part_on_part_fn)(TinyHttpParserMultiPartContext_t *context, const TinyHttpParserPair_t *headers_list, size_t headers_list_size, const char *data, size_t size);
+  typedef void (*tiny_http_parser_multi_part_on_part_fn)(TinyHttpParserMultiPartContext_t *context,
+                                                         const TinyHttpParserPair_t *headers_list, size_t headers_list_size,
+                                                         const char *data, size_t size);
   typedef void (*tiny_http_parser_multi_part_on_completed_fn)(TinyHttpParserMultiPartContext_t *context);
   typedef void (*tiny_http_parser_multi_part_on_error_fn)(TinyHttpParserMultiPartContext_t *context, const char *reason);
   typedef void *(*tiny_http_parser_multi_part_realloc_buffer_fn)(TinyHttpParserMultiPartContext_t *context, void *buffer, size_t new_size);
@@ -199,7 +205,8 @@ extern "C"
     void *user_context;
     const char *error_reason;
     int parser_status;
-    const TinyHttpParserStringView_t *boundary;
+    char boundary[TINY_HTTP_PARSER_MULTI_PART_BOUNDARY_MAX_SIZE + 10];
+    size_t boundary_size;
 
     char *buffer;
     size_t buffer_size;
