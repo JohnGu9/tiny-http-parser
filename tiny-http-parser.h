@@ -295,31 +295,29 @@ extern "C"
 
 #else
 
-// websocket (only available when c standard bigger than c99 `__STDC_VERSION__ >= 199901L`)
+// websocket (only available when c standard higher than c99 `__STDC_VERSION__ >= 199901L`)
 // reference: https://en.wikipedia.org/wiki/WebSocket
 //            https://www.rfc-editor.org/info/rfc6455/#section-5.2
 
 #include <stdint.h>
+
+#ifndef TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE
+#define TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE 4
+#endif
 
 typedef struct _TinyHttpParserWebsocketContext TinyHttpParserWebsocketContext_t;
 
 /**
  * @brief
  *
- * @param opcode - [8]  close;
- *                 [9]  ping;
- *                 [10] pong;
+ * @param opcode [1]  utf-8;
+ *               [2]  binray;
+ *               [8]  close;
+ *               [9]  ping;
+ *               [10] pong;
  *
  */
-typedef void (*tiny_http_parser_websocket_on_control_fn)(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size);
-/**
- * @brief
- *
- * @param opcode - [1]  utf-8;
- *                 [2]  binray;
- *
- */
-typedef void (*tiny_http_parser_websocket_on_message_fn)(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size);
+typedef void (*tiny_http_parser_websocket_on_data_fn)(TinyHttpParserWebsocketContext_t *context, uint8_t opcode, const char *data, size_t size);
 typedef void (*tiny_http_parser_websocket_on_error_fn)(TinyHttpParserWebsocketContext_t *context, const char *reason);
 typedef void *(*tiny_http_parser_websocket_realloc_buffer_fn)(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t new_size);
 typedef void (*tiny_http_parser_websocket_free_buffer_fn)(TinyHttpParserWebsocketContext_t *context, void *buffer, size_t buffer_size);
@@ -330,7 +328,7 @@ struct _TinyHttpParserWebsocketContext
   const char *error_reason;
   int parser_status;
 
-  uint8_t header[2 /* Fixed */ + 8 /* Extended payload length */ + 4 /* Masking-key */];
+  uint8_t header[2 /* Fixed */ + 8 /* Extended payload length */ + TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE];
   size_t header_size;
   const uint8_t *current_mask_key;
 
@@ -339,8 +337,8 @@ struct _TinyHttpParserWebsocketContext
   size_t current_payload_length;
   size_t recv_payload_length;
 
-  tiny_http_parser_websocket_on_control_fn on_control;
-  tiny_http_parser_websocket_on_message_fn on_message;
+  tiny_http_parser_websocket_on_data_fn on_control;
+  tiny_http_parser_websocket_on_data_fn on_message;
   tiny_http_parser_websocket_on_error_fn on_error;
   tiny_http_parser_websocket_realloc_buffer_fn realloc_buffer;
   tiny_http_parser_websocket_free_buffer_fn free_buffer;
@@ -359,8 +357,8 @@ struct _TinyHttpParserWebsocketContext
  */
 void tiny_http_parser_websocket_init(TinyHttpParserWebsocketContext_t *context,
                                      void *user_context,
-                                     tiny_http_parser_websocket_on_control_fn on_control,
-                                     tiny_http_parser_websocket_on_message_fn on_message,
+                                     tiny_http_parser_websocket_on_data_fn on_control,
+                                     tiny_http_parser_websocket_on_data_fn on_message,
                                      tiny_http_parser_websocket_on_error_fn on_error,
                                      tiny_http_parser_websocket_realloc_buffer_fn realloc_buffer,
                                      tiny_http_parser_websocket_free_buffer_fn free_buffer);
