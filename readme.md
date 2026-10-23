@@ -30,3 +30,29 @@ tiny_http_parser_deinit(&context);
 ```
 
 Check out [test.c](./test.c) for detail.
+
+# Extension
+
+```c
+TinyHttpParserBodyContext_t
+```
+
+Handle http mono body. Check out [body.c](test/body.c) for detail.
+
+```c
+TinyHttpParserMultiPartContext_t
+```
+
+Handle http [multi part](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types) body. Check out [multi-part.c](test/multi-part.c) for detail.
+
+```c
+TinyHttpParserChunkContext_t
+```
+
+Handle http [chunk](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Transfer-Encoding) body. Check out [chunk.c](test/chunk.c) for detail.
+
+```c
+TinyHttpParserWebsocketContext_t
+```
+
+Handle http [websocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket). Check out [websocket-unix.cpp](test/websocket-unix.cpp) for detail.
