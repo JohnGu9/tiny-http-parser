@@ -365,7 +365,19 @@ void tiny_http_parser_websocket_init(TinyHttpParserWebsocketContext_t *context,
 size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *context, const char *data /* input http "BODY" data */, size_t size, size_t *remain_not_recv_size /* nullable */);
 void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context);
 
-const uint8_t *tiny_http_parser_websocket_get_mask(TinyHttpParserWebsocketContext_t *context);
+/**
+ * @brief build a websocket data frame on `header_buffer`
+ * 
+ * @param header_buffer 
+ * @param fin 
+ * @param opcode 
+ * @param payload_length 
+ * @param mask nullable
+ * @return size_t 
+ */
+size_t tiny_http_parser_websocket_build_data_frame_header(
+    char header_buffer[2 /* Fixed */ + 8 /* Extended payload length */ + TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE],
+    uint8_t fin, uint8_t opcode, uint64_t payload_length, const char mask[TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE]);
 
 #endif
 

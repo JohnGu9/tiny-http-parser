@@ -27,6 +27,32 @@
     (context)->on_error((context), (context)->error_reason); \
   } while (0)
 
+/**
+ * @brief
+ *
+ * @param remain_not_recv_size nullable
+ */
+static void _set_to_max(size_t *remain_not_recv_size)
+{
+  if (remain_not_recv_size != NULL)
+  {
+    memset(remain_not_recv_size, 0xFF, sizeof(size_t));
+  }
+}
+
+/**
+ * @brief
+ *
+ * @param remain_not_recv_size nullable
+ */
+static void _set_to_zero(size_t *remain_not_recv_size)
+{
+  if (remain_not_recv_size != NULL)
+  {
+    *remain_not_recv_size = 0;
+  }
+}
+
 int tiny_http_parser_string_view_compare(const TinyHttpParserStringView_t *string_view, const char *data, size_t size)
 {
   if (string_view->size < size)
@@ -663,7 +689,7 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
     {
       if (_is_string_view_equal_to(&el->value, "chunked"))
       {
-        memset(&chunked_length, 0xFF, sizeof(chunked_length)); // max value of size_t
+        _set_to_max(&chunked_length);
       }
     }
     else if (_is_string_view_equal_to(&el->key, "Content-Length"))
@@ -672,7 +698,7 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
     }
     else if (_find_sub_string(el->key.data, el->key.size, FMT_LITERAL("Content-")) != NULL)
     {
-      memset(&unknown_body_size, 0xFF, sizeof(unknown_body_size)); // max value of size_t
+      _set_to_max(&unknown_body_size);
     }
   }
   if (chunked_length != 0)
@@ -735,10 +761,7 @@ size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const c
     context->free_buffer(context, context->buffer, context->buffer_size);
     context->buffer = NULL;
     context->buffer_size = 0;
-    if (remain_not_recv_size != NULL)
-    {
-      *remain_not_recv_size = 0;
-    }
+    _set_to_zero(remain_not_recv_size);
     return 0;
   }
   if (context->buffer == NULL &&
@@ -1038,17 +1061,12 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
     if (context->parser_status == _parser_multi_part_completed)
     {
       context->on_completed(context);
-      if (remain_not_recv_size != NULL)
-      {
-        *remain_not_recv_size = 0;
-      }
+      _set_to_zero(remain_not_recv_size);
       return data - data_start;
     }
   }
-  if (remain_not_recv_size != NULL)
-  {
-    memset(remain_not_recv_size, 0xFF, sizeof(*remain_not_recv_size));
-  }
+
+  _set_to_max(remain_not_recv_size);
   return full_size;
 }
 
@@ -1314,18 +1332,12 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
     if (context->parser_status == _parser_status_chunk_completed)
     {
       context->on_completed(context);
-      if (remain_not_recv_size != NULL)
-      {
-        *remain_not_recv_size = 0;
-      }
+      _set_to_zero(remain_not_recv_size);
       return data - data_start;
     }
   }
 
-  if (remain_not_recv_size != NULL)
-  {
-    memset(remain_not_recv_size, 0xFF, sizeof(*remain_not_recv_size));
-  }
+  _set_to_max(remain_not_recv_size);
   return full_size;
 }
 
@@ -1440,7 +1452,7 @@ static uint64_t _ntohll(uint64_t val)
   return val;
 }
 
-#else // fallback runtime check
+#else // fallback runtime check endian
 
 static int _is_big_endian_raw()
 {
@@ -1553,12 +1565,12 @@ static int _parser_websocket_header(TinyHttpParserWebsocketContext_t *context)
     uint64_t length;
     memcpy(&length, extend_payload_length_start, sizeof(length));
     extend_payload_length = _ntohll(length);
-    if (extend_payload_length < _pow_unsigned(2, 16))
+    if ((extend_payload_length >> 16) == 0) // small than 2**16
     {
       _invoke_on_error(context, "The minimum number of bits must be used");
       return -1;
     }
-    if (extend_payload_length >> 63)
+    if (extend_payload_length >> 63) // bigger than 2**63
     {
       _invoke_on_error(context, "The most significant bit must be zero");
       return -1;
@@ -1655,8 +1667,8 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
       {
         if (context->buffer == NULL)
         {
-          if ((expected_recv_length == 0) ||                                       // 0 size
-              (size >= expected_recv_length && context->current_mask_key == NULL)) // no mask and completed  frame
+          if ((expected_recv_length == 0) ||                                       // 0 size plain fin message
+              (size >= expected_recv_length && context->current_mask_key == NULL)) // no mask and completed frame
           {
             // skip memory allocation
             callback(context, opcode, data, expected_recv_length);
@@ -1669,7 +1681,7 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
         }
         else // context->buffer != NULL
         {
-          if (expected_recv_length == 0)
+          if (expected_recv_length == 0) // 0 size plain fin message
           {
             callback(context, opcode, context->buffer, context->buffer_size);
             is_callback_invoked = 1;
@@ -1684,6 +1696,14 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
       if (expected_recv_length == 0) // 0 size
       {
         is_payload_completed = 1;
+        break;
+      }
+
+      if (size == 0 && context->current_mask_key == NULL)
+      {
+        // now can't predict situation
+        // next message may come with full payload that can skip memory allocation
+        // stop status change
         break;
       }
 
@@ -1746,18 +1766,13 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
     if (is_callback_invoked != 0 && opcode == 8) // close
     {
       context->parser_status = _parser_status_websocket_data_frame_closed;
-      if (remain_not_recv_size)
-      {
-        *remain_not_recv_size = 0;
-      }
+      _set_to_zero(remain_not_recv_size);
       const size_t consume_data_size = data_end - data;
       return consume_data_size;
     }
   }
-  if (remain_not_recv_size)
-  {
-    memset(remain_not_recv_size, 0xFF, sizeof(*remain_not_recv_size));
-  }
+
+  _set_to_max(remain_not_recv_size);
   return full_size;
 }
 
@@ -1771,9 +1786,44 @@ void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context
   }
 }
 
-const uint8_t *tiny_http_parser_websocket_get_mask(TinyHttpParserWebsocketContext_t *context)
+size_t tiny_http_parser_websocket_build_data_frame_header(
+    char buffer[2 /* Fixed */ + 8 /* Extended payload length */ + TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE],
+    uint8_t fin, uint8_t opcode, uint64_t payload_length, const char mask[TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE])
 {
-  return context->current_mask_key;
+  assert((payload_length >> 63) == 0);
+  uint8_t *header = (uint8_t *)buffer;
+
+  uint8_t fin_bit = fin ? 0b10000000 : 0;
+  header[0] = fin_bit | (0b00001111 & opcode);
+
+  size_t header_size = 2;
+  uint8_t mask_flag = mask != NULL ? 0b10000000 : 0;
+
+  if (payload_length < 126)
+  {
+    uint8_t length = (uint8_t)payload_length;
+    header[1] = mask_flag | length;
+  }
+  else if (payload_length < _pow_unsigned(2, 16))
+  {
+    uint8_t length = 126;
+    header[1] = mask_flag | length;
+    header_size += 2;
+  }
+  else
+  {
+    uint8_t length = 127;
+    header[1] = mask_flag | length;
+    header_size += 8;
+  }
+
+  if (mask)
+  {
+    memcpy(header + header_size, mask, TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE);
+    header_size += TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE;
+  }
+
+  return header_size;
 }
 
 #endif
