@@ -1641,7 +1641,7 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
 
     const size_t size = data_end - data;
     const uint8_t opcode = _websocket_opcode(context->header[0]);
-    const uint8_t fin = _websocket_opcode(context->header[0]);
+    const uint8_t fin = _websocket_fin(context->header[0]);
     const tiny_http_parser_websocket_on_data_fn callback =
         opcode < 8 ? context->on_message : context->on_control;
     int8_t is_callback_invoked = 0;
