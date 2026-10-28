@@ -7,10 +7,6 @@
 
 #include <string.h>
 
-#ifndef TINY_HTTP_PARSER_SIZE_T // must be unsigned type
-#define TINY_HTTP_PARSER_SIZE_T size_t
-#endif
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -36,11 +32,13 @@ extern "C"
   struct _TinyHttpParserStringView
   {
     const char *data;
-    TINY_HTTP_PARSER_SIZE_T size;
+    size_t size;
   };
 
+#ifndef StaticTinyHttpParserStringView
 #define StaticTinyHttpParserStringView(literal) \
   (TinyHttpParserStringView_t) { .data = (literal), .size = sizeof(literal) - 1, }
+#endif
 
   int tiny_http_parser_string_view_compare(const TinyHttpParserStringView_t *string_view, const char *data, size_t size);
 
@@ -311,9 +309,13 @@ typedef struct _TinyHttpParserWebsocketContext TinyHttpParserWebsocketContext_t;
  * @brief
  *
  * @param opcode [1]  utf-8;
+ *
  *               [2]  binray;
+ *
  *               [8]  close;
+ *
  *               [9]  ping;
+ *
  *               [10] pong;
  *
  */
@@ -328,7 +330,7 @@ struct _TinyHttpParserWebsocketContext
   const char *error_reason;
   int parser_status;
 
-  uint8_t header[2 /* Fixed */ + 8 /* Extended payload length */ + TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE];
+  uint8_t header[2 /* Fixed */ + sizeof(uint64_t) /* Extended payload length */ + TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE];
   size_t header_size;
   const uint8_t *current_mask_key;
 
@@ -367,17 +369,47 @@ void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context
 
 /**
  * @brief build a websocket data frame on `header_buffer`
- * 
- * @param header_buffer 
- * @param fin 
- * @param opcode 
- * @param payload_length 
+ *
+ * @param header_buffer
+ * @param fin
+ * @param opcode
+ * @param payload_length
  * @param mask nullable
- * @return size_t 
+ * @return size_t
  */
-size_t tiny_http_parser_websocket_build_data_frame_header(
+size_t tiny_http_parser_websocket_set_data_frame_header(
     char header_buffer[2 /* Fixed */ + 8 /* Extended payload length */ + TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE],
     uint8_t fin, uint8_t opcode, uint64_t payload_length, const char mask[TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE]);
+
+/**
+ * @brief
+ *
+ * @param bytes
+ * @return [1000] Normal closure
+ *
+ *         [1001] Going away
+ *
+ *         [1002] Protocol error
+ *
+ *         [1003] Unsupported data
+ *
+ *         [1005*] No code received
+ *
+ *         [1006*] Connection closed abnormally
+ *
+ *         [1007] Invalid payload data
+ *
+ *         [1008] Policy violated
+ *
+ *         [1009] Message too big
+ *
+ *         [1010] Unsupported extension
+ *
+ *         [1011] Internal server error
+ *
+ *         [1015*] TLS handshake failure
+ */
+uint16_t tiny_http_parser_websocket_get_close_status_code(const char bytes[2]);
 
 #endif
 

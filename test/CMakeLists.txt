@@ -24,4 +24,8 @@ if(UNIX)
     add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/websocket-accept)
     add_executable(websocket_unix ${CMAKE_CURRENT_LIST_DIR}/websocket-unix.cpp)
     target_link_libraries(websocket_unix PRIVATE thp common websocket_accept)
+
+    add_executable(http_server_unix ${CMAKE_CURRENT_LIST_DIR}/http-server-unix.cpp)
+    target_link_libraries(http_server_unix PRIVATE thp common)
+    file(COPY ${CMAKE_CURRENT_LIST_DIR}/http-server/index.html DESTINATION ${CMAKE_BINARY_DIR}/test)
 endif()

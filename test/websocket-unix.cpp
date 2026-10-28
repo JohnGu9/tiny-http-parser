@@ -106,6 +106,8 @@ static void _onWsControl(TinyHttpParserWebsocketContext_t *context, uint8_t opco
         if (size != 0)
         {
             // echo the close status code
+            assert(size >= 2); // close message at least has two bytes for close status code if it has payload
+            printf("[Close Status Code]%d\n", tiny_http_parser_websocket_get_close_status_code(data));
             const uint8_t closeMessage[] = {0x88, (uint8_t)size}; // control frame size always small than 126, safe to convert to uint8_t
             send(clientContext->fd, closeMessage, sizeof(closeMessage), 0);
             // this app acts as a server and no need to mask data

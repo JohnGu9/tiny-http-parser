@@ -62,7 +62,7 @@ int main()
     uint64_t payload_size;
 
     payload_size = 4;
-    data_frame_header_size = tiny_http_parser_websocket_build_data_frame_header(data_frame_header, 1, 1, payload_size, NULL);
+    data_frame_header_size = tiny_http_parser_websocket_set_data_frame_header(data_frame_header, 1, 1, payload_size, NULL);
     tiny_http_parser_websocket_input(&context, data_frame_header, data_frame_header_size, NULL);
     {
         const char data_frame_payload[] = {'a', 'b', 'c', 'd'};
@@ -71,7 +71,7 @@ int main()
     }
 
     payload_size = 5;
-    data_frame_header_size = tiny_http_parser_websocket_build_data_frame_header(data_frame_header, 0, 1, payload_size, NULL);
+    data_frame_header_size = tiny_http_parser_websocket_set_data_frame_header(data_frame_header, 0, 1, payload_size, NULL);
     tiny_http_parser_websocket_input(&context, data_frame_header, data_frame_header_size, NULL);
     {
         const char data_frame_payload[] = {'a', 'b', 'c', 'd', 'e'};
@@ -80,7 +80,7 @@ int main()
     }
 
     payload_size = 3;
-    data_frame_header_size = tiny_http_parser_websocket_build_data_frame_header(data_frame_header, 1, 1, payload_size, NULL);
+    data_frame_header_size = tiny_http_parser_websocket_set_data_frame_header(data_frame_header, 1, 1, payload_size, NULL);
     tiny_http_parser_websocket_input(&context, data_frame_header, data_frame_header_size, NULL);
     {
         const char data_frame_payload[] = {'a', 'b', 'c'};
@@ -88,8 +88,9 @@ int main()
         tiny_http_parser_websocket_input(&context, data_frame_payload, payload_size, NULL);
     }
 
+    // close
     payload_size = 0;
-    data_frame_header_size = tiny_http_parser_websocket_build_data_frame_header(data_frame_header, 1, 8, payload_size, NULL);
+    data_frame_header_size = tiny_http_parser_websocket_set_data_frame_header(data_frame_header, 1, 8, payload_size, NULL);
     tiny_http_parser_websocket_input(&context, data_frame_header, data_frame_header_size, NULL);
 
     tiny_http_parser_websocket_deinit(&context);

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f5f7fa;
+        }
+
+        .upload-container {
+            background: #fff;
+            padding: 40px 50px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            width: 100%;
+            max-width: 450px;
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-btn {
+            display: inline-block;
+            background-color: #2563eb;
+            color: white;
+            padding: 14px 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+
+        .upload-btn:hover {
+            background-color: #1d4ed8;
+        }
+
+        .file-info {
+            margin-top: 25px;
+            padding: 12px;
+            background-color: #f8fafc;
+            border-radius: 6px;
+            color: #475569;
+            font-size: 14px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status-tip {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #64748b;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="upload-container">
+        <h2>File Upload Tool</h2>
+        <input type="file" id="fileInput" name="upload_file">
+        <label for="fileInput" class="upload-btn">Select file to upload</label>
+
+        <div class="file-info" id="fileInfo">Current File: None</div>
+        <div class="status-tip" id="statusTip"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const statusTip = document.getElementById('statusTip');
+
+        function uploadFileWithProgress(file, url, onprogress) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = Math.round((e.loaded / e.total) * 100);
+                        onprogress(percentComplete);
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve();
+                    } else {
+                        reject(new Error(`Upload failed with status: ${xhr.status}`));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    reject(new Error('Network error occurred'));
+                };
+
+                xhr.open('POST', url);
+                xhr.send(file);
+            });
+        }
+
+        fileInput.addEventListener('change', async (e) => {
+            const selectedFile = e.target.files[0];
+            if (!selectedFile) {
+                fileInfo.textContent = "Current File: None";
+                return;
+            }
+
+            fileInfo.textContent = `Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(2)} KB)`;
+            statusTip.textContent = "Uploading...";
+
+            try {
+                const uploadRes = await uploadFileWithProgress(selectedFile, "/upload",
+                    (progress) => {
+                        statusTip.textContent = `✅ Uploading (${progress}%)`;
+                        statusTip.style.color = "#64748b";
+                    });
+                statusTip.textContent = "✅ Upload succeeded";
+                statusTip.style.color = "#10b981";
+            } catch (err) {
+                statusTip.textContent = `⚠️ Upload error: ${err.message}`;
+                statusTip.style.color = "#f59e0b";
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -310,7 +310,7 @@ static void _get_chunk(const char *data, const char *data_end, TinyHttpParserStr
   const char *end = _go_to_next_char(' ', start, data_end);
   *string_view = (TinyHttpParserStringView_t){
       .data = start,
-      .size = (TINY_HTTP_PARSER_SIZE_T)(end - start),
+      .size = (end - start),
   };
 }
 
@@ -361,15 +361,15 @@ static size_t _parser_optional_headers(TinyHttpParserPair_t *headers_list,
       headers_list[headers_list_size++] = (TinyHttpParserPair_t){
           .raw = {
               .data = line_start,
-              .size = (TINY_HTTP_PARSER_SIZE_T)(line_end - line_start),
+              .size = (line_end - line_start),
           },
           .key = {
               .data = line_start,
-              .size = (TINY_HTTP_PARSER_SIZE_T)(key_end - line_start),
+              .size = (key_end - line_start),
           },
           .value = {
               .data = value_start,
-              .size = (TINY_HTTP_PARSER_SIZE_T)(line_end - value_start),
+              .size = (line_end - value_start),
           },
       };
     }
@@ -453,7 +453,7 @@ static size_t _parser_headers(TinyHttpParserContext_t *context, const char *data
   TinyHttpParserHeader_t header = {
       .raw = {
           .data = data,
-          .size = (TINY_HTTP_PARSER_SIZE_T)size,
+          .size = size,
       },
       .request_header = NULL,
       .response_header = NULL,
@@ -550,11 +550,10 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
           .data = data,
           .size = size,
       };
-      const TinyHttpParserStringView_t header_end_symbol = StaticTinyHttpParserStringView("\r\n\r\n");
       char search_buffer[8];
       size_t position = 0;
       const TinyHttpParserStringView_t *result =
-          _find_sub_string_from_two_part(&part0, &part1, &header_end_symbol, search_buffer, sizeof(search_buffer), &position);
+          _find_sub_string_from_two_part(&part0, &part1, &_header_end_symbol, search_buffer, sizeof(search_buffer), &position);
       if (result == NULL)
       {
         size_t new_size = context->header_buffer_size + size;
@@ -575,11 +574,11 @@ void tiny_http_parser_input(TinyHttpParserContext_t *context, const char *data, 
       size_t copy_size;
       if (result == &part0)
       {
-        copy_size = position + header_end_symbol.size - part0.size;
+        copy_size = position + _header_end_symbol.size - part0.size;
       }
       else if (result == &part1)
       {
-        copy_size = position + header_end_symbol.size;
+        copy_size = position + _header_end_symbol.size;
       }
       else
       {
@@ -776,7 +775,7 @@ size_t tiny_http_parser_body_input(TinyHttpParserBodyContext_t *context, const c
   void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
   if (new_size != 0 && new_buffer == NULL)
   {
-    _invoke_on_error(context, "http body parser alloc buffer failed");
+    _invoke_on_error(context, "alloc buffer failed");
     return 0;
   }
 
@@ -982,12 +981,11 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
                                          size_t *remain_not_recv_size)
 {
 
-  assert(context->parser_status != _parser_multi_part_completed);
-
   const char *const data_start = data;
   const char *const data_end = data + full_size;
   for (; data != NULL && data < data_end;)
   {
+    assert(context->parser_status != _parser_multi_part_completed);
     const size_t size = data_end - data;
     switch (context->parser_status)
     {
@@ -999,7 +997,7 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
         if (new_buffer == NULL)
         {
-          _invoke_on_error(context, "http multi part parser alloc buffer failed");
+          _invoke_on_error(context, "alloc buffer failed");
           data = NULL;
           break;
         }
@@ -1024,7 +1022,7 @@ size_t tiny_http_parser_multi_part_input(TinyHttpParserMultiPartContext_t *conte
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_buffer == NULL)
       {
-        _invoke_on_error(context, "http multi part parser alloc buffer failed");
+        _invoke_on_error(context, "alloc buffer failed");
         data = NULL;
         break;
       }
@@ -1148,13 +1146,11 @@ static const char *_skip_to_chunk_end(const char *data, size_t size, size_t expe
 
 size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const char *data, size_t full_size, size_t *remain_not_recv_size /* nullable */)
 {
-
-  assert(context->parser_status != _parser_status_chunk_completed);
-
   const char *const data_start = data;
   const char *const data_end = data + full_size;
   for (; data != NULL && data < data_end;)
   {
+    assert(context->parser_status != _parser_status_chunk_completed);
     size_t size = data_end - data;
     switch (context->parser_status)
     {
@@ -1166,7 +1162,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
         if (new_buffer == NULL)
         {
-          _invoke_on_error(context, "http multi part parser alloc buffer failed");
+          _invoke_on_error(context, "alloc buffer failed");
           data = NULL;
           break;
         }
@@ -1201,7 +1197,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
         if (new_buffer == NULL)
         {
-          _invoke_on_error(context, "http multi part parser alloc buffer failed");
+          _invoke_on_error(context, "alloc buffer failed");
           data = NULL;
           break;
         }
@@ -1234,7 +1230,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_buffer == NULL)
       {
-        _invoke_on_error(context, "http multi part parser alloc buffer failed");
+        _invoke_on_error(context, "alloc buffer failed");
         data = NULL;
         break;
       }
@@ -1259,7 +1255,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
         void *new_buffer = context->realloc_buffer(context, context->buffer, size);
         if (new_buffer == NULL)
         {
-          _invoke_on_error(context, "http multi part parser alloc buffer failed");
+          _invoke_on_error(context, "alloc buffer failed");
           data = NULL;
           break;
         }
@@ -1291,7 +1287,7 @@ size_t tiny_http_parser_chunk_input(TinyHttpParserChunkContext_t *context, const
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_buffer == NULL)
       {
-        _invoke_on_error(context, "http multi part parser alloc buffer failed");
+        _invoke_on_error(context, "alloc buffer failed");
         data = NULL;
         break;
       }
@@ -1612,10 +1608,11 @@ static void _mask_websocket_payload(char *data, size_t size, const uint8_t *mask
 
 size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *context, const char *data, size_t full_size, size_t *remain_not_recv_size)
 {
-  assert(context->parser_status != _parser_status_websocket_data_frame_closed);
+  const char *const data_start = data;
   const char *const data_end = data + full_size;
   for (; data != NULL && data < data_end;)
   {
+    assert(context->parser_status != _parser_status_websocket_data_frame_closed);
     switch (context->parser_status)
     {
     case _parser_status_websocket_data_frame_header:
@@ -1712,7 +1709,7 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
       void *new_buffer = context->realloc_buffer(context, context->buffer, new_size);
       if (new_size != 0 && new_buffer == NULL)
       {
-        _invoke_on_error(context, "http websocket parser alloc buffer failed");
+        _invoke_on_error(context, "alloc buffer failed");
         data = NULL;
         break;
       }
@@ -1767,8 +1764,7 @@ size_t tiny_http_parser_websocket_input(TinyHttpParserWebsocketContext_t *contex
     {
       context->parser_status = _parser_status_websocket_data_frame_closed;
       _set_to_zero(remain_not_recv_size);
-      const size_t consume_data_size = data_end - data;
-      return consume_data_size;
+      return data - data_start;
     }
   }
 
@@ -1786,7 +1782,15 @@ void tiny_http_parser_websocket_deinit(TinyHttpParserWebsocketContext_t *context
   }
 }
 
-size_t tiny_http_parser_websocket_build_data_frame_header(
+#ifndef _htons
+#define _htons _ntohs
+#endif
+
+#ifndef _htonll
+#define _htonll _ntohll
+#endif
+
+size_t tiny_http_parser_websocket_set_data_frame_header(
     char buffer[2 /* Fixed */ + 8 /* Extended payload length */ + TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE],
     uint8_t fin, uint8_t opcode, uint64_t payload_length, const char mask[TINY_HTTP_PARSER_WEBSOCKET_MASK_KEY_SIZE])
 {
@@ -1799,21 +1803,26 @@ size_t tiny_http_parser_websocket_build_data_frame_header(
   size_t header_size = 2;
   uint8_t mask_flag = mask != NULL ? 0b10000000 : 0;
 
-  if (payload_length < 126)
+  if (payload_length < 126) // 0 ~ 125
   {
     uint8_t length = (uint8_t)payload_length;
     header[1] = mask_flag | length;
   }
-  else if (payload_length < _pow_unsigned(2, 16))
+  else if ((payload_length >> 16) == 0) // 126 ~ (2**16 - 1)
   {
     uint8_t length = 126;
     header[1] = mask_flag | length;
+    uint16_t extend_payload_length = _htons((uint16_t)payload_length);
+    memcpy(header + header_size, &extend_payload_length, sizeof(extend_payload_length));
     header_size += 2;
   }
-  else
+  else // 2**16 ~ (2**63 - 1)
   {
+    assert((payload_length >> 63) == 0);
     uint8_t length = 127;
     header[1] = mask_flag | length;
+    uint64_t extend_payload_length = _htonll(payload_length);
+    memcpy(header + header_size, &extend_payload_length, sizeof(extend_payload_length));
     header_size += 8;
   }
 
@@ -1824,6 +1833,13 @@ size_t tiny_http_parser_websocket_build_data_frame_header(
   }
 
   return header_size;
+}
+
+uint16_t tiny_http_parser_websocket_get_close_status_code(const char bytes[2])
+{
+  uint16_t result;
+  memcpy(&result, bytes, sizeof(uint16_t));
+  return _ntohs(result);
 }
 
 #endif
