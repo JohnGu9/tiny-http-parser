@@ -658,7 +658,7 @@ size_t tiny_http_parser_default_on_header(TinyHttpParserContext_t *context, cons
   UNUSED(context);
 
   const TinyHttpParserPair_t *headers_list = NULL;
-  const TinyHttpParserStringView_t *status_code;
+  const TinyHttpParserStringView_t *status_code = NULL;
   size_t headers_list_size = 0;
   if (header->response_header != NULL)
   {
